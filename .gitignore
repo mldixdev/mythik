@@ -1,0 +1,27 @@
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+.turbo/
+.vite/
+
+*.tgz
+packages/core/docs/
+
+# Secrets & credentials
+.env
+.env.*
+.npmrc
+.mythikrc
+.mythikrc-*
+
+# Public docs policy: publish only canonical consumer docs and compiled wiki.
+docs/*
+!docs/consumer/
+!docs/consumer/**
+!docs/wiki/
+docs/wiki/*
+!docs/wiki/compiled/
+!docs/wiki/compiled/**
+docs/wiki/_meta/
+docs/wiki/SCHEMA.md

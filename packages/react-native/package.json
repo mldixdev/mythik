@@ -1,0 +1,71 @@
+{
+  "name": "mythik-react-native",
+  "version": "0.1.0",
+  "description": "Preview React Native runtime for rendering Mythik JSON specs in Expo and React Native applications.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "keywords": [
+    "mythik",
+    "react-native",
+    "expo",
+    "json",
+    "spec-driven",
+    "application-framework",
+    "preview"
+  ],
+  "homepage": "https://mythik.dev",
+  "bugs": {
+    "url": "https://github.com/mldixdev/mythik/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mldixdev/mythik.git",
+    "directory": "packages/react-native"
+  },
+  "files": [
+    "src",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "typecheck": "node ../../node_modules/typescript/bin/tsc --noEmit"
+  },
+  "dependencies": {
+    "mythik": "workspace:*",
+    "@react-navigation/native": "^7.2.2",
+    "@react-navigation/native-stack": "^7.14.10",
+    "@react-navigation/bottom-tabs": "^7.15.9",
+    "@react-navigation/drawer": "^7.9.8"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-native": ">=0.76.0",
+    "expo": ">=52.0.0",
+    "react-native-reanimated": ">=3.16.0",
+    "react-native-safe-area-context": ">=5.0.0",
+    "react-native-screens": ">=4.0.0",
+    "react-native-gesture-handler": ">=2.20.0",
+    "expo-linear-gradient": ">=14.0.0",
+    "expo-haptics": ">=14.0.0",
+    "expo-blur": ">=14.0.0",
+    "@react-native-community/slider": ">=5.0.0",
+    "react-native-svg": ">=15.0.0"
+  },
+  "peerDependenciesMeta": {
+    "expo-linear-gradient": { "optional": true },
+    "react-native-svg": { "optional": false }
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "typescript": "^5.7.0"
+  }
+}

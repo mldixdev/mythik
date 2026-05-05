@@ -1,0 +1,65 @@
+{
+  "name": "mythik-cli",
+  "version": "0.1.1",
+  "description": "Command-line and programmatic tooling for validating, linting, pushing, patching, and versioning Mythik specs.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "mythik": "dist/cli.js"
+  },
+  "main": "dist/cli.js",
+  "keywords": [
+    "mythik",
+    "cli",
+    "json",
+    "spec-driven",
+    "validation",
+    "lint",
+    "ai"
+  ],
+  "homepage": "https://mythik.dev",
+  "bugs": {
+    "url": "https://github.com/mldixdev/mythik/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mldixdev/mythik.git",
+    "directory": "packages/cli"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/cli.d.ts",
+      "default": "./dist/cli.js"
+    },
+    "./api": {
+      "types": "./dist/api.d.ts",
+      "default": "./dist/api.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "node ../../node_modules/typescript/bin/tsc",
+    "typecheck": "node ../../node_modules/typescript/bin/tsc --noEmit",
+    "prepack": "pnpm build"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^7.0.0",
+    "mythik": "workspace:*",
+    "@toon-format/toon": "^2.1.0",
+    "commander": "^13.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2"
+  },
+  "peerDependencies": {
+    "typescript": ">=5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "typescript": { "optional": true }
+  }
+}

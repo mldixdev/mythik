@@ -1,0 +1,31 @@
+#!/bin/sh
+echo "Typechecking core..."
+npx tsc --noEmit -p packages/core/tsconfig.json
+if [ $? -ne 0 ]; then
+  echo "TypeScript errors in core. Commit blocked."
+  exit 1
+fi
+
+echo "Building core declarations..."
+npx tsc --declaration --emitDeclarationOnly --outDir packages/core/dist -p packages/core/tsconfig.json 2>/dev/null
+
+echo "Typechecking react..."
+npx tsc --noEmit -p packages/react/tsconfig.json
+if [ $? -ne 0 ]; then
+  echo "TypeScript errors in react. Commit blocked."
+  exit 1
+fi
+
+echo "Typechecking cli..."
+npx tsc --noEmit -p packages/cli/tsconfig.json
+if [ $? -ne 0 ]; then
+  echo "TypeScript errors in cli. Commit blocked."
+  exit 1
+fi
+
+echo "Typechecking server..."
+npx tsc --noEmit -p packages/server/tsconfig.json
+if [ $? -ne 0 ]; then
+  echo "TypeScript errors in server. Commit blocked."
+  exit 1
+fi

@@ -1,0 +1,6 @@
+{
+  "comment": "Baseline bundle size for exports-consumer-simulation.test.ts. Updated intentionally when framework surface grows legitimately. Threshold: current size <= baseline * 1.20.",
+  "bundleSizeBytes": 445150,
+  "lastUpdated": "2026-04-24",
+  "lastUpdatedReason": "Initial baseline recorded post-Item-C exports split (v0.1.0 first public release)."
+}

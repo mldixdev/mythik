@@ -1,0 +1,33 @@
+---
+id: concept-public-package-names
+title: Public package names
+kind: concept
+sources: [docs/consumer/ai-context.md, docs/consumer/WHERE-TO-LOOK.md]
+---
+
+# Public package names
+
+Mythik publishes unscoped npm packages. Do not generate scoped package imports for public npm consumers.
+
+| Public package | Use |
+|---|---|
+| `mythik` | Browser-safe core runtime, state, expressions, validation, browser-safe stores |
+| `mythik/server` | Node-only stores exported from the core package subpath |
+| `mythik-react` | React host, renderer, and web primitives |
+| `mythik-cli` | CLI package; installs the `mythik` binary |
+| `mythik-cli/api` | Programmatic CLI API: `runPush`, `runPatch`, `runLint`, and related types |
+| `mythik-server` | Express server runtime for ApiSpecs |
+
+The `mythik` package also ships the AI documentation under `node_modules/mythik/docs`.
+Use [[@cli-docs]] to locate or copy it after install.
+
+Typical React install:
+
+```bash
+npm install mythik mythik-react
+npm install -D mythik-cli
+```
+
+Add `mythik-server` only when building a Mythik-backed Node server. React Native work is a repository preview track, not part of the initial npm publish surface.
+
+Related: [[@cli-docs]], [[@cli-programmatic-api]], [[@concept-spec-stores-catalog]], [[@concept-where-to-look]].
