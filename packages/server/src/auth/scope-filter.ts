@@ -1,6 +1,9 @@
 import type { ScopeFilterConfig } from './types.js';
 import { assertValidIdentifier } from 'mythik';
 
+/** @internal Alias used when Mythik wraps a source query before applying scope filters. */
+export const SCOPE_ALIAS = '_scoped';
+
 export interface ScopeClause {
   sql: string;
   params: Record<string, unknown>;
@@ -36,7 +39,7 @@ export function buildScopeWhereClause(
 
   if (mode === 'select') {
     return {
-      sql: `_scoped.${column} = @_activeScope`,
+      sql: `${SCOPE_ALIAS}.${column} = @_activeScope`,
       params: { _activeScope: activeScope },
     };
   }
@@ -51,7 +54,7 @@ export function buildScopeWhereClause(
   userScope.forEach((val, i) => { params[`_scope${i}`] = val; });
 
   return {
-    sql: `_scoped.${column} IN (${paramNames.join(', ')})`,
+    sql: `${SCOPE_ALIAS}.${column} IN (${paramNames.join(', ')})`,
     params,
   };
 }
@@ -76,5 +79,5 @@ export function wrapQueryWithScopeFilter(
   originalSql: string,
   scopeClause: ScopeClause,
 ): string {
-  return `SELECT * FROM (\n${originalSql}\n) AS _scoped\nWHERE ${scopeClause.sql}`;
+  return `SELECT * FROM (\n${originalSql}\n) AS ${SCOPE_ALIAS}\nWHERE ${scopeClause.sql}`;
 }

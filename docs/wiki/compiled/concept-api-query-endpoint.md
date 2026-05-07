@@ -40,6 +40,8 @@ SQL-driven read endpoint with optional pagination + totals.
 Returns `{ data, total?, page?, pageSize?, totals? }` — see
 [[@concept-query-envelope]].
 
+With `pagination: "offset"` and `scopeFilter`, generated totals are scoped before aggregation: Mythik filters the query source first, then counts that scoped source. Prefer generated counts. If custom `endpoint.count` SQL is truly needed with `scopeFilter`, include `{{scopeWhere[:alias]}}` or `{{scopeAnd[:alias]}}`; Mythik expands the macro to the correct scope predicate and removes it for bypass roles. Mythik does not otherwise rewrite custom count SQL; use `:alias` for JOIN/subquery counts.
+
 ## Related concepts
 
 - [[@concept-api-endpoints-overview]]

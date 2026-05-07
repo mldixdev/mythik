@@ -209,6 +209,90 @@ describe('TransactionEngine', () => {
       expect(errorDuringOnError).toBeDefined();
       expect((errorDuringOnError as Record<string, unknown>).message).toBeDefined();
     });
+
+    it('preserves backend HTTP error details during onError after rollback', async () => {
+      let errorDuringOnError: unknown;
+      const backendError = {
+        error: {
+          code: 'MECANICO_INVALIDO',
+          message: 'Mecanico invalido para esta orden',
+        },
+      };
+      const customActions = new Map<string, ActionDefinition>([
+        ['capture', {
+          name: 'capture',
+          handler: (_params, _setState, getState) => {
+            errorDuringOnError = getState('/tx/error');
+          },
+        }],
+      ]);
+
+      const { store, engine } = setup({ tasks: ['a', 'b'] }, customActions);
+      const restore = mockFetchHttpError(400, backendError);
+
+      await engine.execute({
+        optimistic: [
+          { action: 'setState', params: { statePath: '/tasks', value: ['a', 'b', 'c'] } },
+        ],
+        confirm: [
+          { action: 'fetch', params: { url: 'https://api.test/tasks', method: 'POST' } },
+        ],
+        onError: [{ action: 'capture' }],
+      });
+
+      restore();
+      expect(store.get('/tasks')).toEqual(['a', 'b']);
+      expect(errorDuringOnError).toMatchObject({
+        status: 400,
+        code: 'MECANICO_INVALIDO',
+        message: 'Mecanico invalido para esta orden',
+        data: backendError,
+      });
+    });
+
+    it('preserves custom Error properties during onError after rollback', async () => {
+      let errorDuringOnError: unknown;
+      const customActions = new Map<string, ActionDefinition>([
+        ['throwHttpError', {
+          name: 'throwHttpError',
+          handler: () => {
+            const err = new Error('Backend unavailable') as Error & {
+              code: string;
+              status: number;
+              details: { retryAfter: number };
+            };
+            err.code = 'SERVICE_UNAVAILABLE';
+            err.status = 503;
+            err.details = { retryAfter: 30 };
+            throw err;
+          },
+        }],
+        ['capture', {
+          name: 'capture',
+          handler: (_params, _setState, getState) => {
+            errorDuringOnError = getState('/tx/error');
+          },
+        }],
+      ]);
+
+      const { store, engine } = setup({ tasks: ['a'] }, customActions);
+
+      await engine.execute({
+        optimistic: [
+          { action: 'setState', params: { statePath: '/tasks', value: ['a', 'b'] } },
+        ],
+        confirm: [{ action: 'throwHttpError' }],
+        onError: [{ action: 'capture' }],
+      });
+
+      expect(store.get('/tasks')).toEqual(['a']);
+      expect(errorDuringOnError).toMatchObject({
+        message: 'Backend unavailable',
+        code: 'SERVICE_UNAVAILABLE',
+        status: 503,
+        details: { retryAfter: 30 },
+      });
+    });
   });
 
   describe('tx cleanup', () => {

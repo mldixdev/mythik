@@ -134,6 +134,7 @@ The `PUT` endpoint at `/api/items/:id` combined with the framework's auto-append
 | `handler` | string | Handler file name (mutually exclusive with `query`) |
 | `crud` | object | `{ table, primaryKey, insertable, updatable }` |
 | `pagination` | `"offset"` or `false` | Enable offset pagination |
+| `count` | string | Optional custom `_total` query for offset pagination. Prefer generated counts. |
 | `totals` | string[] | Aggregate expressions: `"SUM:column"`, `"COUNT:*"` |
 | `params` | object | Parameter definitions (see below) |
 | `policy` | string | Reference to `auth.policies` key, or `"public"` |
@@ -141,6 +142,12 @@ The `PUT` endpoint at `/api/items/:id` combined with the framework's auto-append
 | `audit` | object | Auto-inject user + timestamp fields |
 
 **Param properties:** `type` (`int`/`string`/`float`/`date`/`boolean`), `required?`, `default?`, `max?`, `source?` (`query`/`path`/`body`).
+
+`pagination: "offset"` is compatible with `scopeFilter`. For framework-generated counts, Mythik applies the scope filter to the query source before wrapping it in `COUNT(*)`, so `total` reflects the scoped tenant/role slice. Prefer generated counts. If custom `endpoint.count` is truly needed with `scopeFilter`, include `{{scopeWhere[:alias]}}` when the count has no `WHERE`, or `{{scopeAnd[:alias]}}` when it already has one. Mythik expands the macro to the correct scope predicate, or to an empty string for bypass roles. Other custom count SQL is left verbatim; use `:alias` for JOIN/subquery counts so the scope column is qualified.
+
+```json
+"count": "SELECT COUNT(*) as _total FROM Orders o WHERE o.status = @status {{scopeAnd:o}}"
+```
 
 **Audit properties:** `createdBy?`, `createdAt?`, `updatedBy?`, `updatedAt?` (column names), `timezone?` (IANA string). All optional. Values override client-sent (prevents spoofing). Without timezone → UTC.
 
@@ -191,5 +198,6 @@ The `PUT` endpoint at `/api/items/:id` combined with the framework's auto-append
 - Audit values override client-sent values — prevents spoofing of created_by/updated_at
 - `policy: "public"` skips auth — use for health checks and public endpoints only
 - ScopeFilter `bypassRoles` lets admin roles see all data — other roles see only their scope
+- Generated offset-pagination totals are scoped before aggregation when `scopeFilter` is enabled
 - Provider queries use `@username` parameter and must return `val` column
 - Param `source` defaults to auto-detect: path first, body for non-GET, query as fallback

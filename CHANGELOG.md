@@ -2,6 +2,22 @@
 
 All notable public changes to Mythik are documented in this file.
 
+## 0.1.2
+
+Patch release focused on published-package hardening.
+
+- Fixed DNA numeric seed normalization so legacy `0-100` values such as `roundness: 79` normalize the same way during initial AppSpec load and runtime `updateTokens`.
+- Fixed transaction rollback error handling so `/tx/error` is written after rollback and preserves backend error details (`message`, `code`, HTTP `status`, raw `data`) plus custom `Error` properties.
+- Fixed scoped offset-pagination totals for generated counts by applying `scopeFilter` before `COUNT(*)`, so `total` matches the same tenant/role slice as returned rows.
+- Added `{{scopeWhere[:alias]}}` and `{{scopeAnd[:alias]}}` macros for custom `endpoint.count` SQL with `scopeFilter`, including bypass-role expansion to an empty clause.
+
+## 0.1.1
+
+Patch release for package identity and install-surface alignment.
+
+- Updated workspace package versions and README install examples to the `0.1.1` public package line.
+- Kept package names aligned with the public npm surface: `mythik`, `mythik-react`, `mythik-cli`, `mythik-server`, and `mythik-react-native`.
+
 ## 0.1.0
 
 Initial public release.

@@ -14,6 +14,28 @@ export interface ApiSpecValidationResult {
 
 const DANGEROUS_SQL_KEYWORDS = /\b(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|EXEC|EXECUTE|UNION|INTO)\b/i;
 const SQL_COMMENTS = /(--|\/\*)/;
+const SCOPE_COUNT_MACRO_PATTERN = /{{\s*scope(Where|And)(?::\s*([^}\s]+))?\s*}}/g;
+
+function getScopeCountMacroAliases(sql: string): string[] {
+  const aliases: string[] = [];
+  SCOPE_COUNT_MACRO_PATTERN.lastIndex = 0;
+  for (const match of sql.matchAll(SCOPE_COUNT_MACRO_PATTERN)) {
+    if (match[2]) aliases.push(match[2]);
+  }
+  return aliases;
+}
+
+function hasScopeCountMacro(sql: string): boolean {
+  SCOPE_COUNT_MACRO_PATTERN.lastIndex = 0;
+  return SCOPE_COUNT_MACRO_PATTERN.test(sql);
+}
+
+function endpointHasActiveScopeFilter(
+  endpoint: Record<string, unknown>,
+  auth: Record<string, unknown> | undefined,
+): boolean {
+  return !!auth?.scopeFilter && endpoint.scopeFilter !== undefined && endpoint.scopeFilter !== false;
+}
 
 /**
  * Lint rule: spec-crud-id-collision — error when `endpoint.path` ends with `/:id`
@@ -223,6 +245,23 @@ export function validateApiSpec(spec: unknown): ApiSpecValidationResult {
         const sf = endpoint.scopeFilter as Record<string, unknown>;
         if (sf.column && !isValidIdentifier(sf.column as string)) {
           errors.push(`endpoint "${name}": invalid SQL identifier "${sf.column}" in scopeFilter.column`);
+        }
+      }
+
+      if (typeof endpoint.count === 'string') {
+        const usesScopeFilter = endpointHasActiveScopeFilter(endpoint, s.auth as Record<string, unknown> | undefined);
+        const usesScopeMacro = hasScopeCountMacro(endpoint.count);
+
+        if (usesScopeFilter && !usesScopeMacro) {
+          errors.push(`endpoint "${name}": custom "count" with scopeFilter must include {{scopeWhere}} or {{scopeAnd}} so Mythik can expand scope and bypass-role behavior`);
+        }
+        if (!usesScopeFilter && usesScopeMacro) {
+          errors.push(`endpoint "${name}": custom "count" uses a scope macro but scopeFilter is not enabled for this endpoint`);
+        }
+        for (const alias of getScopeCountMacroAliases(endpoint.count)) {
+          if (!isValidIdentifier(alias)) {
+            errors.push(`endpoint "${name}": invalid scope macro alias "${alias}" in custom "count"`);
+          }
         }
       }
     }

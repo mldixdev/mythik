@@ -38,6 +38,8 @@ Or per-endpoint (boolean / per-endpoint config):
 - For roles in `bypassRoles`, the filter is NOT applied (admin sees all).
 - All other roles see only rows matching their JWT claim.
 - **Applies to UPDATE and DELETE**, not just SELECT — defense in depth.
+- For query endpoints with `pagination: "offset"`, generated totals are scoped before aggregation, so `total` matches the rows the user is allowed to see.
+- Custom `endpoint.count` SQL with `scopeFilter` must use `{{scopeWhere[:alias]}}` or `{{scopeAnd[:alias]}}`; Mythik expands the macro to the correct predicate and removes it for bypass roles. Prefer generated counts when possible. Other custom count SQL is left verbatim; use `:alias` for JOIN/subquery counts.
 
 ## Security invariant
 

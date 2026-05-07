@@ -39,15 +39,16 @@ Full reset (preset apply):
 
 ## Behavior
 
-- Without `_replace`, `updateTokens({ dna: { roundness: 50 } })` merges
+- Without `_replace`, `updateTokens({ dna: { roundness: 0.5 } })` merges
   with previously-applied tokens — previous primary, surface, etc. persist.
 - With `_replace: true`, fully replaces (used internally by `applyPreset`
   to prevent stale flag values from carrying between presets — see
   [[@action-apply-preset]]).
 - After every call, the framework persists `currentRawTokens` to
   `/tokens/raw` and `resolvedTokens` to `/tokens/resolved`.
-- **Numeric DNA seeds > 1 are auto-normalized (÷100)** for slider
-  0-100 compatibility.
+- **Numeric DNA seeds > 1 are auto-normalized (divided by 100)** for legacy
+  percentage-style compatibility, but generated specs should use canonical
+  0-1 values.
 
 ## Related concepts
 

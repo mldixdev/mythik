@@ -29,7 +29,7 @@ const program = new Command();
 program
   .name('mythik')
   .description('Mythik CLI — manage specs via SpecEngine')
-  .version('0.1.1');
+  .version('0.1.2');
 
 program
   .command('manifest <screen>')

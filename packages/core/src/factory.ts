@@ -204,19 +204,7 @@ export function createMythik(config: MythikConfig = {}): MythikInstance {
       currentRawTokens = deepMergeTokens(currentRawTokens, rawTokens);
     }
 
-    // Normalize DNA seeds: if numeric values > 1, assume 0-100 scale and convert to 0-1
-    const normalized = { ...currentRawTokens };
-    if (normalized.dna && typeof normalized.dna === 'object') {
-      const dna = { ...(normalized.dna as Record<string, unknown>) };
-      const numericSeeds = ['roundness', 'density', 'depth', 'formality'];
-      for (const key of numericSeeds) {
-        if (typeof dna[key] === 'number' && (dna[key] as number) > 1) {
-          dna[key] = (dna[key] as number) / 100;
-        }
-      }
-      normalized.dna = dna;
-    }
-    resolvedTokens = resolveDeepTokens(normalized);
+    resolvedTokens = resolveDeepTokens(currentRawTokens);
     injectColorTokens(resolvedTokens);
     injectIconRenderer(resolvedTokens);
     resolver = buildResolver();

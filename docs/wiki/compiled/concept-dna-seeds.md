@@ -25,6 +25,19 @@ spacing, elevation, motion, opacity, plus auto dark mode.
 | `motion` | enum | `gentle` | `fluid`, `snappy`, `gentle`, `energetic` — animation personality |
 | `formality` | 0–1 | 0.5 | Typography (5 font tiers + continuous letterSpacing/lineHeight/bold weight) |
 
+## Numeric seed scale
+
+Numeric seeds (`roundness`, `density`, `depth`, `formality`) are canonical `0–1` values. Generate `0.7`, not `70`.
+
+For backward compatibility with older exports and percentage-style values, the runtime auto-normalizes numeric seed values greater than `1` by dividing by `100` during DNA derivation. This applies consistently to initial AppSpec load and runtime `updateTokens`.
+
+| Input | Behavior |
+|---|---|
+| `0.79` | Used as-is; recommended canonical form |
+| `79` | Auto-normalized to `0.79` |
+| `1` | Used as-is; boundary value, not divided |
+| `0` | Used as-is |
+
 ## Examples
 
 Minimal:

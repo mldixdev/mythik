@@ -5,7 +5,7 @@ import type { AuthConfig, ScopeFilterConfig, EndpointScopeOverride } from './aut
 import { validateApiSpec } from './validation/spec-validator.js';
 import { createConnectionPool } from './connection.js';
 import { buildCatalogQuery } from './catalog-builder.js';
-import { parseParamValue, getSqlType, buildPaginatedQuery, buildCountQuery, buildTotalsQuery } from './query-engine.js';
+import { parseParamValue, getSqlType, buildPaginatedQuery, buildEndpointCountQuery, buildTotalsQuery } from './query-engine.js';
 import { filterFields, buildInsertQuery, buildUpdateQuery, buildDeleteQuery } from './crud-builder.js';
 import { injectAuditFields } from './audit.js';
 import { checkScreensTable, buildSpecServingRoutes, stripSensitiveFields } from './spec-serving.js';
@@ -431,9 +431,9 @@ function registerEndpoint(
         if (hasPagination) {
           const countRequest = pool.request();
           bindAllParams(countRequest, params, paramValues);
-          let countSql = endpoint.count ?? buildCountQuery(endpoint.query!);
 
           // Apply scope filter to count query too
+          let countClause: ReturnType<typeof buildScopeWhereClause> | null = null;
           if (scopeFilterConfig) {
             const user = getUserFromReq(req);
             if (user) {
@@ -444,15 +444,19 @@ function registerEndpoint(
                   scopeFilterConfig.type,
                 );
               }
-              const countClause = buildScopeWhereClause(scopeFilterConfig, user.scope, activeScope, user.roles);
+              countClause = buildScopeWhereClause(scopeFilterConfig, user.scope, activeScope, user.roles);
               if (countClause) {
-                countSql = wrapQueryWithScopeFilter(countSql, countClause);
                 for (const [key, value] of Object.entries(countClause.params)) {
                   countRequest.input(key, value);
                 }
               }
             }
           }
+
+          const countSql = buildEndpointCountQuery(endpoint.query!, {
+            customCount: endpoint.count,
+            ...(countClause ? { scopeClause: countClause } : {}),
+          });
 
           queries.push(countRequest.query(countSql));
         }

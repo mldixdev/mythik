@@ -329,4 +329,82 @@ describe('validateApiSpec — hardening', () => {
     }));
     expect(result.errors.some((e: string) => e.includes('scopeFilter') && e.includes('identifier'))).toBe(true);
   });
+
+  it('requires scope macros for custom endpoint.count with scopeFilter', () => {
+    const result = validateApiSpec(makeSpec({
+      auth: {
+        strategy: 'jwt',
+        scopeFilter: { claim: 'inst', column: 'tenantId' },
+      },
+      endpoints: {
+        orders: {
+          path: '/api/orders',
+          query: 'SELECT o.id, o.tenantId FROM Orders o ORDER BY o.id',
+          pagination: 'offset',
+          scopeFilter: true,
+          count: 'SELECT COUNT(*) as _total FROM Orders o WHERE o.status = @status',
+        },
+      },
+    }));
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e: string) => e.includes('endpoint "orders"') && e.includes('{{scopeWhere'))).toBe(true);
+  });
+
+  it('accepts custom endpoint.count scope macros with scopeFilter', () => {
+    const result = validateApiSpec(makeSpec({
+      auth: {
+        strategy: 'jwt',
+        scopeFilter: { claim: 'inst', column: 'tenantId' },
+      },
+      endpoints: {
+        orders: {
+          path: '/api/orders',
+          query: 'SELECT o.id, o.tenantId FROM Orders o ORDER BY o.id',
+          pagination: 'offset',
+          scopeFilter: true,
+          count: 'SELECT COUNT(*) as _total FROM Orders o WHERE o.status = @status {{scopeAnd:o}}',
+        },
+      },
+    }));
+
+    expect(result.valid).toBe(true);
+  });
+
+  it('rejects scope macros on custom endpoint.count without scopeFilter', () => {
+    const result = validateApiSpec(makeSpec({
+      endpoints: {
+        orders: {
+          path: '/api/orders',
+          query: 'SELECT o.id FROM Orders o ORDER BY o.id',
+          pagination: 'offset',
+          count: 'SELECT COUNT(*) as _total FROM Orders o {{scopeWhere:o}}',
+        },
+      },
+    }));
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e: string) => e.includes('endpoint "orders"') && e.includes('scopeFilter'))).toBe(true);
+  });
+
+  it('rejects invalid aliases in custom endpoint.count scope macros', () => {
+    const result = validateApiSpec(makeSpec({
+      auth: {
+        strategy: 'jwt',
+        scopeFilter: { claim: 'inst', column: 'tenantId' },
+      },
+      endpoints: {
+        orders: {
+          path: '/api/orders',
+          query: 'SELECT o.id, o.tenantId FROM Orders o ORDER BY o.id',
+          pagination: 'offset',
+          scopeFilter: true,
+          count: 'SELECT COUNT(*) as _total FROM Orders o {{scopeWhere:bad-alias}}',
+        },
+      },
+    }));
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e: string) => e.includes('bad-alias'))).toBe(true);
+  });
 });

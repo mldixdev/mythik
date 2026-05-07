@@ -1,6 +1,6 @@
 {
   "name": "mythik-react",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "React runtime and primitives for rendering Mythik JSON specs as applications.",
   "license": "Apache-2.0",
   "type": "module",

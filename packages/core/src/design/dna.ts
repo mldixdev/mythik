@@ -11,6 +11,11 @@ function roundTo(n: number, decimals: number): number {
   return Math.round(n * factor) / factor;
 }
 
+function normalizeDnaNumericSeed(value: number | undefined, fallback: number): number {
+  if (typeof value !== 'number') return fallback;
+  return value > 1 ? value / 100 : value;
+}
+
 const HARMONY_OFFSETS: Record<string, number> = {
   complementary: 180,
   analogous: 50,
@@ -35,11 +40,11 @@ const MOTION_PRESETS: Record<string, {
  * Uses OKLCH color math for perceptually uniform palette generation.
  */
 export function deriveDna(seed: DnaSeed): DesignTokens {
-  const roundness = seed.roundness ?? 0.5;
-  const density = seed.density ?? 0.5;
-  const depth = seed.depth ?? 0.5;
+  const roundness = normalizeDnaNumericSeed(seed.roundness, 0.5);
+  const density = normalizeDnaNumericSeed(seed.density, 0.5);
+  const depth = normalizeDnaNumericSeed(seed.depth, 0.5);
   const motionPreset = seed.motion ?? 'gentle';
-  const formality = seed.formality ?? 0.5;
+  const formality = normalizeDnaNumericSeed(seed.formality, 0.5);
   const harmony = seed.harmony ?? 'complementary';
   const neutralMode = seed.neutral ?? 'natural';
 

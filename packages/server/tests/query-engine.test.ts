@@ -2,9 +2,11 @@ import { describe, it, expect } from 'vitest';
 import {
   buildPaginatedQuery,
   buildCountQuery,
+  buildEndpointCountQuery,
   buildTotalsQuery,
   parseParamValue,
 } from '../src/query-engine.js';
+import { SCOPE_ALIAS, buildScopeWhereClause } from '../src/auth/scope-filter.js';
 
 describe('parseParamValue', () => {
   it('converts string to int', () => {
@@ -95,6 +97,127 @@ describe('buildCountQuery', () => {
     expect(count).toContain('SELECT COUNT(*) as _total');
     expect(count).toContain('FROM SampleEvents e');
     expect(count).not.toContain('ORDER BY');
+  });
+
+  it('counts scoped pagination sources after applying the scope filter', () => {
+    const sql = 'SELECT o.id, o.mecanico, o.fecha FROM OrdenesTrabajo o ORDER BY o.fecha DESC';
+    const scopeClause = buildScopeWhereClause(
+      {
+        claim: 'scope',
+        column: 'mecanico',
+        type: 'int',
+        bypassRoles: ['ADMIN'],
+      },
+      [7],
+      undefined,
+      ['USER'],
+    )!;
+
+    const count = buildCountQuery(sql, { scopeClause });
+
+    expect(count).toContain('SELECT COUNT(*) as _total FROM (');
+    expect(count).toContain('SELECT * FROM (');
+    expect(count).toContain('SELECT o.id, o.mecanico, o.fecha FROM OrdenesTrabajo o');
+    expect(count).toContain(`WHERE ${SCOPE_ALIAS}.mecanico IN (@_scope0)`);
+    expect(count).not.toContain('ORDER BY');
+    expect(count).not.toMatch(/SELECT \* FROM \(\s*SELECT COUNT\(\*\) as _total/i);
+  });
+});
+
+describe('buildEndpointCountQuery', () => {
+  it('uses generated scoped counts for generated endpoint totals', () => {
+    const source = 'SELECT o.id, o.mecanico FROM OrdenesTrabajo o ORDER BY o.id';
+    const scopeClause = buildScopeWhereClause(
+      {
+        claim: 'scope',
+        column: 'mecanico',
+        type: 'int',
+      },
+      [7],
+      undefined,
+      ['USER'],
+    )!;
+
+    const count = buildEndpointCountQuery(source, { scopeClause });
+
+    expect(count).toContain('SELECT COUNT(*) as _total FROM (');
+    expect(count).toContain(`WHERE ${SCOPE_ALIAS}.mecanico IN (@_scope0)`);
+  });
+
+  it('expands custom count scopeAnd macros without wrapping after aggregation', () => {
+    const source = 'SELECT o.id, o.mecanico FROM OrdenesTrabajo o ORDER BY o.id';
+    const customCount = "SELECT COUNT(*) as _total FROM OrdenesTrabajo o WHERE o.estado = 'activo' {{scopeAnd:o}}";
+    const scopeClause = buildScopeWhereClause(
+      {
+        claim: 'scope',
+        column: 'mecanico',
+        type: 'int',
+      },
+      [7],
+      undefined,
+      ['USER'],
+    )!;
+
+    const count = buildEndpointCountQuery(source, { customCount, scopeClause });
+
+    expect(count).toBe("SELECT COUNT(*) as _total FROM OrdenesTrabajo o WHERE o.estado = 'activo' AND o.mecanico IN (@_scope0)");
+    expect(count).not.toContain(`AS ${SCOPE_ALIAS}`);
+  });
+
+  it('removes custom count scope macros for bypass roles', () => {
+    const source = 'SELECT o.id, o.mecanico FROM OrdenesTrabajo o ORDER BY o.id';
+    const customCount = "SELECT COUNT(*) as _total FROM OrdenesTrabajo o WHERE o.estado = 'activo' {{scopeAnd:o}}";
+
+    const count = buildEndpointCountQuery(source, { customCount, scopeClause: null });
+
+    expect(count).toBe("SELECT COUNT(*) as _total FROM OrdenesTrabajo o WHERE o.estado = 'activo'");
+    expect(count).not.toContain('{{scopeAnd');
+    expect(count).not.toContain('@_scope');
+  });
+
+  it('expands custom count scopeWhere macros for select mode', () => {
+    const source = 'SELECT o.id, o.clinicId FROM Orders o ORDER BY o.id';
+    const customCount = 'SELECT COUNT(*) as _total FROM Orders o {{scopeWhere:o}}';
+    const scopeClause = buildScopeWhereClause(
+      {
+        claim: 'clinics',
+        column: 'clinicId',
+        type: 'int',
+        mode: 'select',
+        header: 'X-Active-Scope',
+      },
+      [2, 5],
+      5,
+      ['USER'],
+    )!;
+
+    const count = buildEndpointCountQuery(source, { customCount, scopeClause });
+
+    expect(count).toBe('SELECT COUNT(*) as _total FROM Orders o WHERE o.clinicId = @_activeScope');
+  });
+
+  it('preserves custom count ORDER BY clauses while rendering scope macros', () => {
+    const source = 'SELECT o.id, o.mecanico FROM OrdenesTrabajo o ORDER BY o.id';
+    const customCount = `SELECT COUNT(*) as _total FROM (
+      SELECT TOP 100 o.id, o.mecanico
+      FROM OrdenesTrabajo o
+      ORDER BY o.priority DESC
+    ) ranked WHERE ranked.id IS NOT NULL {{scopeAnd:ranked}}`;
+    const scopeClause = buildScopeWhereClause(
+      {
+        claim: 'scope',
+        column: 'mecanico',
+        type: 'int',
+      },
+      [7],
+      undefined,
+      ['USER'],
+    )!;
+
+    const count = buildEndpointCountQuery(source, { customCount, scopeClause });
+
+    expect(count).toContain('ORDER BY o.priority DESC');
+    expect(count).toContain(') ranked WHERE ranked.id IS NOT NULL AND ranked.mecanico IN (@_scope0)');
   });
 });
 

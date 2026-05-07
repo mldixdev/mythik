@@ -14,6 +14,55 @@ export interface TransactionEngine {
 
 const DEFAULT_TIMEOUT = 10_000;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string' && value.length > 0) return value;
+  }
+  return undefined;
+}
+
+function getErrorOwnFields(error: Error): Record<string, unknown> {
+  const fields: Record<string, unknown> = {};
+  for (const key of Object.getOwnPropertyNames(error)) {
+    if (key === 'message' || key === 'name' || key === 'stack') continue;
+    fields[key] = (error as unknown as Record<string, unknown>)[key];
+  }
+  return fields;
+}
+
+function normalizeTransactionError(error: unknown, fallbackMessage = 'Transaction failed'): Record<string, unknown> {
+  if (error instanceof Error) {
+    return {
+      ...getErrorOwnFields(error),
+      message: error.message || fallbackMessage,
+    };
+  }
+
+  if (!isRecord(error)) {
+    return { message: fallbackMessage };
+  }
+
+  const data = isRecord(error.data) ? error.data : undefined;
+  const nestedError = data && isRecord(data.error) ? data.error : undefined;
+  const message = firstString(
+    nestedError?.message,
+    data?.message,
+    error.message,
+    fallbackMessage,
+  ) ?? fallbackMessage;
+  const code = firstString(nestedError?.code, data?.code, error.code);
+
+  return {
+    ...error,
+    ...(code ? { code } : {}),
+    message,
+  };
+}
+
 export function createTransactionEngine(config: TransactionEngineConfig): TransactionEngine {
   const { store, dispatcher, resolve } = config;
 
@@ -58,6 +107,8 @@ export function createTransactionEngine(config: TransactionEngineConfig): Transa
     }
 
     // Phase 4: confirm (with timeout)
+    let confirmError: Record<string, unknown> | null = null;
+
     try {
       // Clear any previous lastError so we can detect new ones
       store.set('/ui/lastError', null);
@@ -72,7 +123,7 @@ export function createTransactionEngine(config: TransactionEngineConfig): Transa
       // Check if confirm resulted in an error stored by the fetch action
       const lastError = store.get('/ui/lastError');
       if (lastError) {
-        store.set('/tx/error', lastError);
+        confirmError = normalizeTransactionError(lastError, 'Confirm phase failed');
         throw new Error('Confirm phase failed');
       }
 
@@ -84,12 +135,8 @@ export function createTransactionEngine(config: TransactionEngineConfig): Transa
       // Rollback: restore snapshot atomically (single set, one re-render)
       store.set('/', snapshot);
 
-      // Write error to /tx/error if not already set
-      if (!store.get('/tx/error')) {
-        store.set('/tx/error', {
-          message: err instanceof Error ? err.message : 'Transaction failed',
-        });
-      }
+      // Write error after rollback so root restore cannot erase details.
+      store.set('/tx/error', confirmError ?? normalizeTransactionError(err));
 
       // Phase 5b: onError (after rollback)
       if (txConfig.onError && txConfig.onError.length > 0) {

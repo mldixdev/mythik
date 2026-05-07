@@ -57,6 +57,18 @@ describe('updateTokens', () => {
     expect(shape2.md).toBeGreaterThan(shape1.md);
   });
 
+  it('normalizes initial 0-100 DNA seeds through createMythik', () => {
+    const legacyScale = createSvc({ dna: { primary: '#d4af37', roundness: 79 } });
+    const canonicalScale = createSvc({ dna: { primary: '#d4af37', roundness: 0.79 } });
+
+    const legacyTree = legacyScale.engine.render(spec);
+    const canonicalTree = canonicalScale.engine.render(spec);
+    const legacyRadius = ((legacyTree.props._tokens as Record<string, unknown>).shape as { radius: Record<string, number> }).radius;
+    const canonicalRadius = ((canonicalTree.props._tokens as Record<string, unknown>).shape as { radius: Record<string, number> }).radius;
+
+    expect(legacyRadius).toEqual(canonicalRadius);
+  });
+
   it('bumps state counter to trigger React re-render', () => {
     const svc = createSvc();
 

@@ -146,7 +146,7 @@ Implementation: `packages/core/src/expressions/handlers/template.ts`.
 - **`before`** — eager at dispatch start. Side-effects that must NOT be rolled back (closeModal, navigate). Runs before any network call (reference-doc rule 13).
 - **`optimistic`** — eager at dispatch. State changes applied synchronously; UI reflects the change immediately. Rolled back on `onError`.
 - **`onSuccess`** — eager at network resolve. Response available in resolver context. UPDATE transactions typically omit `onSuccess` — the optimistic state is already correct; re-fetch causes visible flash (reference-doc rule 14).
-- **`onError`** — eager at network reject. Optimistic state reverted via snapshot BEFORE this phase runs. Error available in resolver context.
+- **`onError`** — eager at network reject. Optimistic state reverted via snapshot BEFORE this phase runs. Error available in resolver context. For `fetch` confirm HTTP failures, `/tx/error` preserves backend details after rollback when available: HTTP `status`, raw `data`, nested `error.code`, and the best message from nested `error.message`, `data.message`, or fallback error text.
 
 **Internal phase (not consumer-visible):** a `snapshot` phase captures the state immediately before `optimistic`, enabling rollback. Consumers never invoke `snapshot` directly.
 
@@ -600,7 +600,9 @@ For role `admin`, the filter is NOT applied (admin sees all rows). Any other rol
 
 **Security invariant:** `scopeFilter` applies to UPDATE and DELETE, not just SELECT. A user cannot update or delete rows outside their scope — the filter is appended to the WHERE clause of those queries. Combined with audit fields (§3.1), this gives a defense-in-depth posture for multi-tenant apps.
 
-Implementation: `packages/server/src/server.ts:607-630` (scopeFilter in PUT), `:653-675` (scopeFilter in DELETE), plus equivalent logic in query endpoints (search `buildScopeWhereClause` for all call sites).
+For query endpoints with `pagination: "offset"`, framework-generated totals are scoped before aggregation: Mythik wraps the original query with the scope filter first, then performs `COUNT(*)` over that scoped source. This keeps `total` aligned with the rows the user is allowed to see. Custom `endpoint.count` SQL is an advanced escape hatch. When custom count SQL is used with `scopeFilter`, it must include a scope macro: `{{scopeWhere[:alias]}}` if the count has no `WHERE`, or `{{scopeAnd[:alias]}}` if it already has one. Mythik expands the macro to the correct predicate and removes it for bypass roles. Mythik does not otherwise rewrite custom count SQL; use `:alias` for JOIN/subquery counts so the generated scope predicate is qualified.
+
+Implementation: `packages/server/src/server.ts` (search `buildScopeWhereClause` for all scope-filter call sites).
 
 ---
 

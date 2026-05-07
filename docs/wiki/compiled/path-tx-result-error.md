@@ -15,9 +15,11 @@ messages.
 | Path | Content |
 |---|---|
 | `/tx/result` | Server response when `confirm` writes via `target: "/tx/result"`. Read in `onSuccess` |
-| `/tx/error` | `{ message }` on transaction error. Read in `onError` |
+| `/tx/error` | Transaction error details. Read in `onError` |
 
 Both are cleaned up automatically after the transaction completes.
+
+For `fetch` confirm HTTP failures, `/tx/error` preserves backend details after rollback when available: `message`, `code`, HTTP `status`, and raw `data`. If the backend returns `{ "error": { "code": "...", "message": "..." } }`, `/tx/error/message` uses that backend message rather than the generic transaction phase text.
 
 ## Use
 

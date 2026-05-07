@@ -912,7 +912,7 @@ The action executes in the background. The next action in the chain starts immed
 | `uploadFile` | `{ bucket, target, path? }` | Upload file(s) to storage via StorageAdapter. Writes URL(s) to target path |
 | `deleteFile` | `{ path, bucket }` | Delete file from storage |
 | `export` | `{ source, columns, filename, format? }` | Export data as CSV (built-in) or via adapter (XLSX/PDF). Triggers download |
-| `updateTokens` | `{ dna?: {...}, identity?: {...}, _replace?: true }` | Hot-swap design tokens at runtime. Deep-merges by default; `_replace: true` fully replaces. Persists raw config to `/tokens/raw`. Numeric DNA seeds > 1 auto-normalized (÷100) |
+| `updateTokens` | `{ dna?: {...}, identity?: {...}, _replace?: true }` | Hot-swap design tokens at runtime. Deep-merges by default; `_replace: true` fully replaces. Persists raw config to `/tokens/raw`. Numeric DNA seeds > 1 auto-normalized (÷100) during DNA derivation |
 
 ### fetch Action Details
 
@@ -971,7 +971,7 @@ Use `transaction` for CRUD operations that need instant UI feedback. The framewo
 | `setState` (form reset) | `optimistic` | Restore form so user can retry |
 | `navigate` | `before` | Stay on page, show error there |
 
-**Confirm result access:** The `fetch` in `confirm` can write to `/tx/result` via `target`. `onSuccess` reads it with `{ "$state": "/tx/result" }`. On error, `/tx/error` contains `{ message }`. Both are cleaned up automatically.
+**Confirm result access:** The `fetch` in `confirm` can write to `/tx/result` via `target`. `onSuccess` reads it with `{ "$state": "/tx/result" }`. On error, `/tx/error` contains `{ message }`; fetch-based HTTP failures preserve backend details when available (`status`, `data`, nested `error.code`, nested `error.message`). Both are cleaned up automatically.
 
 **Timeout:** Default 10 seconds. Override with `timeout` (ms):
 ```json
@@ -1985,7 +1985,7 @@ Reference tokens or write custom values:
 98. **Use DNA seeds for app identity** — define `tokens.dna` in AppSpec with 1-8 seed values. The framework derives all visual tokens (colors via OKLCH tonal palette, shape, typography, spacing, elevation, motion, opacity) plus auto dark mode. No manual color palette or radius scale needed — DNA generates it from `{ "primary": "#0D9488" }`
 99. **Three-layer token resolution** — Framework DEFAULTS (always present) → DNA derivation (if `dna` seed exists) → Manual overrides (explicit `tokens.*` values always win). Specs without tokens use defaults. Specs with only DNA get full derived identity. Specs with DNA + overrides get derived base with surgical customization
 100. **`$token` auto-converts elevation to CSS** — `{ "$token": "elevation.md" }` returns a CSS `boxShadow` string on web (e.g., `"0px 4px 12px rgba(0,0,0,0.15)"`). On RN, primitives handle elevation internally via native shadow props. No manual conversion needed
-101. **`updateTokens` for runtime token changes** — `{ "action": "updateTokens", "params": { "dna": { "primary": "#F97316" } } }` hot-swaps all tokens without page reload. All primitives re-render with new values. Numeric DNA seeds > 1 are auto-normalized (divided by 100 for 0-100 slider compatibility)
+101. **`updateTokens` for runtime token changes** — `{ "action": "updateTokens", "params": { "dna": { "primary": "#F97316" } } }` hot-swaps all tokens without page reload. All primitives re-render with new values. Numeric DNA seeds > 1 are auto-normalized during DNA derivation (divided by 100 for 0-100 legacy/slider compatibility)
 102. **Font loading is the project's responsibility** — DNA derives font family names (Inter, DM Sans, Playfair Display, Georgia, Source Sans) but does NOT load them. Web: include Google Fonts link or `@font-face`. RN: use `expo-font`. Without loading, browser falls back to system fonts
 103. **`useDesignTokens` replaces `useThemeColors` in primitives** — all 35 migrated primitives (18 web + 17 RN) use `useDesignTokens` internally. It extracts colors, shape, typography, spacing, elevation, motion, and opacity with framework defaults as fallback. `useThemeColors` is deprecated but still works as wrapper
 104. **`mythik tokens` inspects DNA derivation** — `mythik tokens --dna '{"primary":"#0D9488"}' --json` shows the full resolved token set. Use for debugging and verifying what DNA generates before applying to a spec
@@ -2010,7 +2010,7 @@ Reference tokens or write custom values:
 123. **Custom checkbox is surface-aware** — Replaced native `<input type="checkbox">` with custom div+SVG. Unchecked: uses `t.surface.input` styles. Checked: fills with primary, preserves surface border (bold keeps 2px, neo keeps shadow). Focus uses `t.surface.inputFocus`. Hidden input preserved for accessibility
 124. **Elevation and border resolvers ready but not yet consumed** — `resolveElevationStyle()` (diffuse/solid/color/none) and `resolveBorderStyle()` defined, tested, exported, values in `t.identity.*`. Primitives don't consume them yet — reserved for future phases when elevation identity overrides surface defaults
 125. **`colors.background` is the STATIC base page background** — Distinct from `colors.surface` (card/component bg). Returns `#f8fafc` light gray (or dark-mode equivalent via `/preferences/theme`), but does NOT respond to preset `identity.colorScheme` changes. Safe for light-only apps. For preset-aware layouts (apps that support dark-surface or colored-surface presets), use `backgroundCSS` instead — see rule 155. Visible failure mode: dark preset with layout using `colors.background` produces a light frame around dark content
-126. **`updateTokens` does deep merge — partial updates work** — Calling `updateTokens({ dna: { roundness: 50 } })` merges with previously-applied tokens instead of replacing them. Previous primary color, surface settings, etc. persist. Enables live playground controls where each slider updates only its dimension
+126. **`updateTokens` does deep merge — partial updates work** — Calling `updateTokens({ dna: { roundness: 0.5 } })` merges with previously-applied tokens instead of replacing them. Previous primary color, surface settings, etc. persist. Enables live playground controls where each slider updates only its dimension. Legacy 0-100 values are tolerated by runtime normalization, but generated specs should use canonical 0-1 values.
 127. **`deepMergeTokens` exported from core** — `import { deepMergeTokens } from 'mythik'`. Recursively merges objects (arrays and non-objects replace, objects deep-merge). Used internally by `updateTokens`
 128. **Depth and angle are serializer concerns, not data concerns** — `identity.depth` (0-1) and `identity.shadowAngle` (0-360°) are NOT in `StructuredSurfaceStyleProps`. Shadows store raw `magnitude`/`blur`/`opacity`. The serializer (`surfaceToCSS`/`surfaceToRN`) applies `depthScale()` and sin/cos angle rotation when converting to platform-specific format. This keeps the structured data pure and reusable
 129. **`resolveIdentity<T>()` — unified orchestrator** — Single function in core orchestrates: resolveSchemeColors → generateTonalStep → resolveSurfaceStyles → serializer(T) → resolveColorWeight → resolveRadiusPattern. Accepts a `SurfaceSerializer<T>` function — each platform passes its own (surfaceToCSS, surfaceToRN). Returns `{ schemeColors, surface: T, colorWeight, radius }`. Web/RN hooks call this one function instead of 6+ manual steps
@@ -2729,6 +2729,8 @@ Define in `tokens.dna` at the AppSpec level. The framework derives ALL token cat
 | `motion` | `fluid` \| `snappy` \| `gentle` \| `energetic` | `gentle` | Animation duration, spring, stagger |
 | `formality` | 0–1 | 0.5 | Typography: 5 font tiers. Body: Inter → Space Grotesk → Source Sans 3 → Lora → Merriweather. Heading: Inter → Space Grotesk → DM Sans → Lora → Playfair Display. Also drives continuous letterSpacing (0 → 0.03em), headingLetterSpacing (0 → -0.02em), lineHeight ratio (1.45 → 1.6), bold weight (700 → 800) |
 
+Numeric seeds are canonical `0–1` values. Generate `0.7`, not `70`. For backward compatibility with legacy exports and percentage-style inputs, values greater than `1` are auto-normalized by dividing by `100` during DNA derivation, so both initial AppSpec load and runtime `updateTokens` resolve consistently.
+
 ### Three Control Levels
 
 **Level 1 — Just a color:** `"dna": { "primary": "#0D9488" }` → full coherent identity.
@@ -2764,7 +2766,7 @@ Use `updateTokens` action to change tokens without page reload:
 ```json
 { "action": "updateTokens", "params": { "dna": { "primary": "#F97316", "roundness": 0.9 } } }
 ```
-All primitives re-render with new tokens. Numeric seeds > 1 are auto-divided by 100 (slider 0-100 compatibility).
+All primitives re-render with new tokens. Numeric seeds > 1 are auto-divided by 100 during DNA derivation (legacy slider 0-100 compatibility).
 
 ### Presets System
 
@@ -3199,3 +3201,6 @@ See `ai-context.md` for spec-gen anti-patterns the AI must NOT generate.
 
 282. **Existing spec edits must use the CLI inspection-then-patch loop** - For an existing screen/app/api spec, AI agents should run `mythik manifest <id>` first, inspect only the target nodes with `mythik elements <id> <ids>`, apply a small RFC 6902 patch with `mythik patch <id> --from-file patch.json`, and verify with `manifest` or `elements`. This keeps edits surgical, validated, versionable, and reviewable. `pull` is for backup, migration, review, or full-document work; `push` is for new specs or intentional full replacement. Direct database edits and direct `SpecStore.save()` calls bypass validation and are not approved spec-write paths.
 283. **Bundled AI docs are part of the install surface** - The `mythik` package includes `docs/llms.txt`, `docs/consumer/*`, and `docs/wiki/compiled/*`. Agents should run `mythik docs path` before spec generation and read the bundled docs rather than guessing from package source. Use `mythik docs copy ./mythik-docs` to create a project-local copy when the host workflow needs explicit files.
+284. **DNA numeric seeds are canonical `0–1`, with legacy `0–100` normalization** - Generate `tokens.dna.roundness`, `density`, `depth`, and `formality` as `0–1` numbers (`0.7`, not `70`). The runtime normalizes numeric seed values greater than `1` by dividing by `100` inside DNA derivation, so initial AppSpec load and runtime `updateTokens` share the same backward-compatible behavior.
+285. **Scoped pagination counts filter before aggregation** - Query endpoints may combine `pagination: "offset"` with `scopeFilter`. For generated counts, the server applies the scope filter to the query source first and then counts the scoped source, so the response `total` matches the same tenant/role slice as `data`. Prefer generated counts. If custom `endpoint.count` is truly needed with `scopeFilter`, it must include `{{scopeWhere[:alias]}}` or `{{scopeAnd[:alias]}}`; Mythik expands the macro to the correct scope predicate and removes it for bypass roles. Other custom count SQL is left verbatim. Specs should use `:alias` for JOIN/subquery counts and should not reference internal scope parameter names directly.
+286. **Transaction fetch failures preserve backend error details** - When a transaction `confirm` uses `fetch` and the backend returns an HTTP error payload such as `{ error: { code, message } }`, `/tx/error` is written after rollback with the best backend message plus `code`, HTTP `status`, and raw `data`. `onError` should read `/tx/error/message`; transaction specs should not read global `/ui/lastError`.

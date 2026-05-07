@@ -88,6 +88,47 @@ describe('deriveDna', () => {
     expect(result.shape!.radius!.md).toBeLessThan(12);
   });
 
+  describe('numeric seed scale normalization', () => {
+    it('treats 0-100 roundness seeds the same as canonical 0-1 seeds', () => {
+      const percentScale = deriveDna({ primary: '#d4af37', roundness: 79 });
+      const canonicalScale = deriveDna({ primary: '#d4af37', roundness: 0.79 });
+
+      expect(percentScale.shape!.radius).toEqual(canonicalScale.shape!.radius);
+    });
+
+    it('normalizes all numeric DNA seeds from 0-100 scale', () => {
+      const percentScale = deriveDna({
+        primary: '#d4af37',
+        roundness: 79,
+        density: 53,
+        depth: 27,
+        formality: 5,
+      });
+      const canonicalScale = deriveDna({
+        primary: '#d4af37',
+        roundness: 0.79,
+        density: 0.53,
+        depth: 0.27,
+        formality: 0.05,
+      });
+
+      expect(percentScale).toEqual(canonicalScale);
+    });
+
+    it('does not double-normalize boundary value 1', () => {
+      const result = deriveDna({ primary: '#d4af37', roundness: 1 });
+
+      expect(result.shape!.radius!.lg).toBe(24);
+    });
+
+    it('keeps 0-100 roundness from creating leaf-shaped radii', () => {
+      const result = deriveDna({ primary: '#d4af37', roundness: 79 });
+
+      expect(result.shape!.radius!.sm).toBeLessThan(20);
+      expect(result.shape!.radius!.lg).toBeLessThan(50);
+    });
+  });
+
   describe('color preservation', () => {
     it('preserves the exact primary color the user chose', () => {
       const amber = deriveDna({ primary: '#F59E0B' });

@@ -434,7 +434,7 @@ Use `transaction` for CRUD operations. Instant UI → server confirm → auto-ro
 - `optimistic` — data changes, ROLLED BACK on error (setState for data + form reset)
 - `confirm` — network request, determines success. Write to `/tx/result` via target
 - `onSuccess` — post-success sync (re-fetch). `$state: "/tx/result"` reads confirm result
-- `onError` — runs after rollback. `$state: "/tx/error"` has `{ message }`
+- `onError` — runs after rollback. `$state: "/tx/error"` has `{ message }`; fetch-based confirm failures preserve backend details when available (`status`, `data`, nested `error.code`, nested `error.message`)
 
 **CRUD variations:**
 
@@ -962,6 +962,8 @@ Tokens go beyond colors. Every visual property reads from tokens — shape, typo
 | `motion` | `fluid` \| `snappy` \| `gentle` \| `energetic` | Animation personality |
 | `formality` | 0–1 | Typography: 0=casual (Inter) → 1=formal (Playfair Display) |
 
+Use `0–1` numeric DNA values in generated specs. The runtime accepts legacy `0–100` values for `roundness`, `density`, `depth`, and `formality` by normalizing values greater than `1` with `/100`, but canonical specs should emit `0.7`, not `70`.
+
 **Three control levels:**
 
 Level 1 — Minimal: `"dna": { "primary": "#0D9488" }` → full identity from 1 color.
@@ -1372,3 +1374,6 @@ When the framework changes the schema in a future version, this section will gai
 84. In React apps without auth framework fetch, pass `fetcher` to `MythikApp` when editor sessions use `editorSave` or `navigationGuardSaveAndProceed`. Auth-enabled apps continue to use the framework fetch produced by auth interceptors. Do not route save-and-continue through `/ui/lastError` or a hand-composed fetch action; the editor session engine owns save metadata under `/ui/editorSessions/<id>`.
 85. For existing spec edits, the required AI loop is `mythik manifest` -> `mythik elements` -> `mythik patch --from-file` -> verify. Manifest tells you the structure; elements gives the exact JSON you are changing; patch is the validated write path. Do not skip directly to full-spec `pull`/rewrite/push for a local change, do not mutate DB rows manually, and do not call `SpecStore.save()` from app code. Use `push` for new specs or intentional full replacement only.
 86. Mythik's AI documentation ships with the `mythik` npm package. Before generating or modifying specs, locate it with `mythik docs path` and start from `docs/llms.txt`, `docs/consumer/ai-context.md`, and `docs/wiki/compiled/README.md`. Use `mythik docs copy ./mythik-docs` when a project-local copy is easier to hand to an AI agent.
+87. DNA numeric seeds (`roundness`, `density`, `depth`, `formality`) are canonical `0–1` values. Generate `0.7`, not `70`. The runtime tolerates legacy `0–100` values by normalizing any numeric seed greater than `1` with `/100` during DNA derivation, including initial AppSpec load and runtime `updateTokens`.
+88. API query endpoints can combine `pagination: "offset"` with `scopeFilter`. For generated counts, Mythik applies the scope filter to the source query before `COUNT(*)`, so paginated totals remain tenant-scoped. Prefer generated counts. If a custom `endpoint.count` is truly needed with `scopeFilter`, include `{{scopeWhere[:alias]}}` or `{{scopeAnd[:alias]}}`; Mythik expands the macro to the correct scope predicate and removes it for bypass roles. Other custom count SQL is left verbatim. Use `:alias` for JOIN/subquery counts, and do not reference internal scope params directly.
+89. Transaction `confirm` failures from `fetch` preserve backend error details for `onError`. Read `/tx/error/message` for the best available message; when the backend returns `{ error: { code, message } }`, Mythik keeps that message, `code`, HTTP `status`, and raw `data` after rollback. Do not parse `/ui/lastError` from transaction specs.

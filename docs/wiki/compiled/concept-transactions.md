@@ -41,7 +41,10 @@ automatically.**
 
 `fetch` in `confirm` writes to `/tx/result` via `target`. `onSuccess` reads
 it via `{ "$state": "/tx/result" }`. On error, `/tx/error` contains
-`{ message }`. Both are cleaned up automatically.
+the best available error details. For `fetch` confirm HTTP failures, Mythik
+preserves backend `error.message`, `error.code`, HTTP `status`, and raw `data`
+after rollback so `onError` can show a useful message. Both paths are cleaned
+up automatically.
 
 ## Timeout
 
