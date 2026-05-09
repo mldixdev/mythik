@@ -4,7 +4,7 @@ import request from 'supertest';
 import { filterFields } from '../src/crud-builder.js';
 import { createErrorHandler } from '../src/middleware/error-handler.js';
 
-// Integration tests using a manually wired Express app (mssql mocked)
+// Integration tests using a manually wired Express app
 // These verify the HTTP layer: routing, status codes, response shapes, field filtering
 
 function createTestApp() {

@@ -14,7 +14,7 @@ The difference is just rows in a database.
                            │ fetches at runtime
                            ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  Spec store (Postgres / SQL Server / file / memory)             │
+│  Spec store (Supabase / SQL / file / memory)                    │
 │  • home.spec.json     • task-manager.spec.json                  │
 │  • settings.spec.json • api-spec.json                           │
 │  • app-spec.json      • …                                       │
@@ -29,8 +29,8 @@ The difference is just rows in a database.
                 └─────────────────────┘
 ```
 
-Mythik is available as an early public `0.1.2` release. The packages
-below are the npm publish surface.
+Mythik is available as an early public release. The packages below
+are the npm publish surface.
 
 ---
 
@@ -291,6 +291,22 @@ For a Mythik-backed REST server:
 npm install mythik-server
 ```
 
+For SQL-backed spec stores and servers, Mythik supports SQL Server,
+PostgreSQL, MySQL, and SQLite through the `mythik/server` SQL boundary:
+
+```bash
+npm install mythik         # SQL-backed SpecStores via mythik/server
+npm install mythik-server  # REST server runtime, when you need APIs too
+npx mythik init-store --dialect sqlite --target ./mythik.db
+npx mythik init-store --dialect postgres --dry-run
+```
+
+SQL adapters (`mssql`, `pg`, `mysql2`, and `better-sqlite3`) are
+declared as optional dependencies of `mythik`. npm/pnpm install
+optional dependencies by default; if the host installs with optional
+dependencies disabled, add the adapter for the database you use. MySQL
+generated upsert SQL targets MySQL 8.0.19+.
+
 ## Minimal React app
 
 ```tsx
@@ -338,19 +354,19 @@ export default function App() {
 ```
 
 This renders a full Mythik app with one screen. Replace `MemorySpecStore`
-with `SupabaseSpecStore` (or `SqlServerSpecStore` from `mythik/server`)
-to back the same code with a real database. The host file does not
-change as the app grows.
+with `SupabaseSpecStore` or with `SqlSpecStore` from `mythik/server`
+backed by SQL Server, PostgreSQL, MySQL, or SQLite. The host file does
+not change as the app grows.
 
 ## Packages
 
 | Package | Purpose | Status |
 |---|---|---|
-| [`mythik`](packages/core/) | Core runtime: spec types, validation, expressions, actions, stores, versioning, editor sessions | 0.1.2 |
-| [`mythik-react`](packages/react/) | React renderer, app shell, primitive registry with 38 built-ins | 0.1.2 |
-| [`mythik-cli`](packages/cli/) | The `mythik` command + programmatic CLI API. The AI-first surface to the framework | 0.1.2 |
-| [`mythik-server`](packages/server/) | Declarative REST server from an `ApiSpec` — auth, RLS, catalogs, CRUD | 0.1.2 |
-| [`mythik-react-native`](packages/react-native/) | Preview track. Not part of the initial npm publish surface | preview |
+| [`mythik`](packages/core/) | Core runtime: spec types, validation, expressions, actions, stores, versioning, editor sessions | published |
+| [`mythik-react`](packages/react/) | React renderer, app shell, primitive registry with 38 built-ins | published |
+| [`mythik-cli`](packages/cli/) | The `mythik` command + programmatic CLI API. The AI-first surface to the framework | published |
+| [`mythik-server`](packages/server/) | Declarative REST server from an `ApiSpec` — auth, RLS, catalogs, CRUD | published |
+| [`mythik-react-native`](packages/react-native/) | Repository preview track. Not part of the supported npm publish surface yet | preview |
 
 Each package's README focuses on its specific role within the
 framework. Read them for installation specifics and per-package
@@ -417,10 +433,10 @@ edited directly.
 
 ## Release status
 
-`v0.1.2` is the current public npm release. The core, React,
-CLI, and server packages are the supported publish surface. React
-Native work remains in the repository as a preview track and is
-intentionally not part of this release.
+The core, React, CLI, and server packages are the supported npm
+publish surface. React Native work remains in the repository as a
+preview track and is intentionally not part of the supported publish
+surface yet.
 
 The framework is shipped for real-world feedback. APIs are documented
 and stable enough to build production apps; expect refinements as

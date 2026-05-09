@@ -121,10 +121,10 @@ export default function App() {
 }
 ```
 
-Replace `MemorySpecStore` with `SupabaseSpecStore` (or
-`SqlServerSpecStore` from `mythik/server`) to back the same code with
-a real database. The host file does not change as the app grows from
-2 screens to 200.
+Replace `MemorySpecStore` with `SupabaseSpecStore` or a `SqlSpecStore`
+from `mythik/server` backed by SQL Server, PostgreSQL, MySQL, or
+SQLite. The host file does not change as the app grows from 2 screens
+to 200.
 
 ## How the renderer works
 
@@ -176,8 +176,8 @@ audit trail.
 
 ## Status
 
-`v0.1.2` public release. React Native work remains a repository
-preview track and is not part of the initial npm publish surface.
+Public release line. React Native work remains a repository preview
+track and is not part of the supported npm publish surface yet.
 
 ## License
 

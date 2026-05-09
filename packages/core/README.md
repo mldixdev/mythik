@@ -55,9 +55,11 @@ You install `mythik` whenever you're building anything Mythik-related:
   interface:
   - Browser-safe entry: `MemorySpecStore`, `SupabaseSpecStore`
   - Node-only entry (`mythik/server`): `FileSpecStore`,
-    `SqlServerSpecStore`
+    `SqlSpecStore`, `SqlVersionedSpecStore`, `SqlEnvironmentStore`,
+    and SQL Server compatibility stores
   - Versioned variants (`SupabaseVersionedSpecStore`,
-    `SupabaseEnvironmentStore`) add snapshot+patch-chain history,
+    `SupabaseEnvironmentStore`, `SqlVersionedSpecStore`,
+    `SqlEnvironmentStore`) add snapshot+patch-chain history,
     structural diffs, and atomic promote gates
 
 - **Expression and action engines** — the runtime that resolves
@@ -77,14 +79,36 @@ You install `mythik` whenever you're building anything Mythik-related:
 // Browser-safe (works in any runtime)
 import { MemorySpecStore, SupabaseSpecStore } from 'mythik';
 
-// Node-only (file system, SQL Server, anything that needs Node APIs)
-import { FileSpecStore, SqlServerSpecStore } from 'mythik/server';
+// Node-only (file system and SQL drivers)
+import { FileSpecStore, SqlSpecStore, createSqlDriver } from 'mythik/server';
 ```
 
 Bundlers like Vite or Webpack should always import from `mythik` (the
 main entry). The `mythik/server` subpath is for Node scripts and
-server processes only — it pulls in modules like `mssql` and
-`node:fs` that won't work in a browser.
+server processes only — it pulls in Node APIs and optional SQL driver
+packages that won't work in a browser.
+
+SQL-backed stores use one dialect-aware driver boundary:
+
+```ts
+import { SqlSpecStore, createSqlDriver } from 'mythik/server';
+
+const driver = createSqlDriver({
+  dialect: 'postgres', // 'sqlserver' | 'postgres' | 'mysql' | 'sqlite'
+  connection: process.env.DATABASE_URL!,
+});
+
+const store = new SqlSpecStore({ driver });
+```
+
+Initialize the required tables with the CLI:
+
+```bash
+npx mythik init-store --dialect sqlite --target ./mythik.db
+npx mythik init-store --dialect postgres --dry-run
+```
+
+MySQL generated upsert SQL targets MySQL 8.0.19+.
 
 ## Minimal example
 
@@ -171,12 +195,12 @@ modify specs.
 - [`mythik-server`](https://github.com/mldixdev/mythik/tree/main/packages/server#readme) — declarative REST server from an `ApiSpec`
 
 React Native work is a repository preview track and is not part of
-the initial npm publish surface.
+the supported npm publish surface yet.
 
 ## Status
 
-`v0.1.2` public release. APIs are documented for real-world feedback
-as the framework evolves.
+Public release line. APIs are documented for real-world feedback as
+the framework evolves.
 
 ## License
 

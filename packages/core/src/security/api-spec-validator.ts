@@ -15,6 +15,7 @@ export interface ApiSpecValidationResult {
 const DANGEROUS_SQL_KEYWORDS = /\b(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|EXEC|EXECUTE|UNION|INTO)\b/i;
 const SQL_COMMENTS = /(--|\/\*)/;
 const SCOPE_COUNT_MACRO_PATTERN = /{{\s*scope(Where|And)(?::\s*([^}\s]+))?\s*}}/g;
+const SUPPORTED_SQL_DIALECTS = new Set(['sqlserver', 'postgres', 'mysql', 'sqlite']);
 
 function getScopeCountMacroAliases(sql: string): string[] {
   const aliases: string[] = [];
@@ -112,6 +113,10 @@ export function validateApiSpec(spec: unknown): ApiSpecValidationResult {
   }
   const s = spec as Record<string, unknown>;
   const errors: string[] = [];
+
+  if (s.dialect !== undefined && (typeof s.dialect !== 'string' || !SUPPORTED_SQL_DIALECTS.has(s.dialect))) {
+    errors.push('dialect must be one of: sqlserver, postgres, mysql, sqlite');
+  }
 
   // Catalogs
   const catalogs = s.catalogs as Record<string, Record<string, unknown>> | undefined;

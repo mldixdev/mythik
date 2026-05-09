@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import type { SqlDriver } from 'mythik/server';
 import { createDbAuthProvider } from '../../src/auth/db-auth-provider.js';
 import type { ProviderConfig, JwtConfig } from '../../src/auth/types.js';
 import bcrypt from 'bcryptjs';
@@ -26,48 +27,43 @@ const jwtConfig: JwtConfig = {
   claims: { username: 'sub', name: 'nombre', roles: 'roles', scope: 'organizations' },
 };
 
-function createMockPool(
+function createMockDriver(
   userData: Record<string, unknown> | null,
   rolesData: unknown[],
   scopeData: unknown[],
   displayName?: string,
   defaultScope?: unknown,
   email?: string,
-) {
+): SqlDriver {
   return {
-    request: () => {
-      const req: Record<string, unknown> = {
-        input: (_name: string, _value: unknown) => req,
-        query: async (sql: string) => {
-          // Check specific queries before generic ones (order matters)
-          if (sql.includes('RoleCode')) {
-            return { recordset: rolesData.map(v => ({ val: v })) };
-          }
-          if (sql.includes('UserOrganizations')) {
-            return { recordset: scopeData.map(v => ({ val: v })) };
-          }
-          if (sql.includes('FirstName')) {
-            return { recordset: displayName ? [{ val: displayName }] : [] };
-          }
-          if (sql.includes('OrganizationId') && sql.includes('AppUsers')) {
-            return { recordset: defaultScope !== undefined ? [{ val: defaultScope }] : [] };
-          }
-          // Generic user lookup (SELECT * FROM table) — must be last
-          if (sql.includes('SELECT *') && sql.includes(providerConfig.usersTable)) {
-            return { recordset: userData ? [{ ...userData, Email: email ?? 'test@test.com' }] : [] };
-          }
-          return { recordset: [] };
-        },
-      };
-      return req;
+    query: async (sql: string, params?: unknown) => {
+      expect(params).toEqual({ username: expect.any(String) });
+      if (sql.includes('RoleCode')) {
+        return rolesData.map(v => ({ val: v }));
+      }
+      if (sql.includes('UserOrganizations')) {
+        return scopeData.map(v => ({ val: v }));
+      }
+      if (sql.includes('FirstName')) {
+        return displayName ? [{ val: displayName }] : [];
+      }
+      if (sql.includes('OrganizationId') && sql.includes('AppUsers')) {
+        return defaultScope !== undefined ? [{ val: defaultScope }] : [];
+      }
+      if (sql.includes('SELECT *') && sql.includes(providerConfig.usersTable)) {
+        return userData ? [{ ...userData, Email: email ?? 'test@test.com' }] : [];
+      }
+      return [];
     },
-  };
+    quoteIdent: (identifier: string) => `"${identifier}"`,
+    quoteQualified: (...identifiers: string[]) => identifiers.map(identifier => `"${identifier}"`).join('.'),
+  } as unknown as SqlDriver;
 }
 
 describe('DbAuthProvider', () => {
   describe('login', () => {
     it('returns token and user for valid credentials', async () => {
-      const pool = createMockPool(
+      const db = createMockDriver(
         { Username: 'sample-user', PasswordHash: passwordHash },
         ['ADMIN', 'EDITOR'],
         [1, 5, 12],
@@ -75,7 +71,7 @@ describe('DbAuthProvider', () => {
         5,
         'user@example.com',
       );
-      const provider = createDbAuthProvider(providerConfig, jwtConfig, pool as never);
+      const provider = createDbAuthProvider(providerConfig, jwtConfig, db);
       const result = await provider.login('sample-user', 'secret123');
 
       expect(result.token).toBeTruthy();
@@ -91,21 +87,21 @@ describe('DbAuthProvider', () => {
     });
 
     it('throws for non-existent user', async () => {
-      const pool = createMockPool(null, [], []);
-      const provider = createDbAuthProvider(providerConfig, jwtConfig, pool as never);
+      const db = createMockDriver(null, [], []);
+      const provider = createDbAuthProvider(providerConfig, jwtConfig, db);
       await expect(provider.login('nobody', 'pass')).rejects.toThrow('Invalid credentials');
     });
 
     it('throws for wrong password', async () => {
-      const pool = createMockPool({ Username: 'sample-user', PasswordHash: passwordHash }, [], []);
-      const provider = createDbAuthProvider(providerConfig, jwtConfig, pool as never);
+      const db = createMockDriver({ Username: 'sample-user', PasswordHash: passwordHash }, [], []);
+      const provider = createDbAuthProvider(providerConfig, jwtConfig, db);
       await expect(provider.login('sample-user', 'wrongpass')).rejects.toThrow('Invalid credentials');
     });
   });
 
   describe('refresh', () => {
     it('returns new tokens for valid refresh token', async () => {
-      const pool = createMockPool(
+      const db = createMockDriver(
         { Username: 'sample-user', PasswordHash: passwordHash },
         ['ADMIN'],
         [1, 5],
@@ -113,7 +109,7 @@ describe('DbAuthProvider', () => {
         1,
         'user@example.com',
       );
-      const provider = createDbAuthProvider(providerConfig, jwtConfig, pool as never);
+      const provider = createDbAuthProvider(providerConfig, jwtConfig, db);
 
       const loginResult = await provider.login('sample-user', 'secret123');
       // Wait 1.1s so JWT iat differs (JWTs use second precision)
@@ -127,8 +123,8 @@ describe('DbAuthProvider', () => {
     });
 
     it('throws for invalid refresh token', async () => {
-      const pool = createMockPool(null, [], []);
-      const provider = createDbAuthProvider(providerConfig, jwtConfig, pool as never);
+      const db = createMockDriver(null, [], []);
+      const provider = createDbAuthProvider(providerConfig, jwtConfig, db);
       await expect(provider.refresh('invalid-token')).rejects.toThrow('Invalid or expired refresh token');
     });
   });

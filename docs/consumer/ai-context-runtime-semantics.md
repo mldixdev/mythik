@@ -58,6 +58,8 @@ When the framework resolves `$state`, `$template`, `$prop`, `$auth`, and other e
 - **Inside a `repeat`** — the binding wrapper is eagerly resolved so `$item` / `$index` can bind to the row being rendered. Inner `$state` / `$template` inside `params` stay lazy (press-time) unless they reference `$item` directly.
 - **`$prop` bindings** — when the binding itself is `{ $prop: "onAction" }` (custom-element Layer 3 propagation), the `$prop` is resolved eagerly so the consumer's supplied action chain replaces it. Inner expressions inside that chain stay lazy.
 - **`TransactionBinding`** — passed through verbatim; transaction engine resolves phases at their respective times.
+- **Mixed event arrays** — an event array may contain normal action bindings and transaction bindings together. The renderer dispatches each entry sequentially and awaits transaction execution before continuing to the next entry.
+- **`params.skipIf`** — resolved at dispatch time before the rest of the action params. If truthy, the action is skipped and the surrounding action chain continues.
 
 Implementation: `packages/core/src/renderer/engine.ts:996-1049`.
 
@@ -766,10 +768,11 @@ Implementation:
 - `packages/cli/src/commands/push.ts` (CLI push versioning path)
 - `packages/cli/src/commands/patch.ts` (CLI patch versioning path)
 
-**Implementation location per store type** (as of v0.1.0):
+**Implementation location per store type**:
 
 - Browser-safe stores (`MemorySpecStore`, `SupabaseSpecStore`, `MemoryVersionedSpecStore`, `SupabaseVersionedSpecStore`, `MemoryEnvironmentStore`, `SupabaseEnvironmentStore`) — import from `mythik` (main entry).
-- Node-only stores (`FileSpecStore`, `SqlServerSpecStore`, `SqlServerVersionedSpecStore`, `SqlServerEnvironmentStore`) — import from `mythik/server`.
+- Node-only stores (`FileSpecStore`, `SqlSpecStore`, `SqlVersionedSpecStore`, `SqlEnvironmentStore`) — import from `mythik/server`.
+- SQL Server compatibility stores (`SqlServerSpecStore`, `SqlServerVersionedSpecStore`, `SqlServerEnvironmentStore`) still exist, but new SQL work should prefer `createSqlDriver({ dialect, connection })` plus the generic `Sql*` stores so the same pattern works for SQL Server, PostgreSQL, MySQL, and SQLite.
 
 The `SpecStore` interface contract (signature, behavior, save-vs-validate layering) is identical across entries. Only the import path changes.
 
@@ -856,7 +859,7 @@ The framework supports two axes of workflow choice: **how you modify specs** (pu
 | Admin UI that edits specs at runtime | Enable. Git can't capture runtime edits. |
 | Compliance (SOX, HIPAA, etc. asking "who changed screen X on date Y") | Enable. Native SQL audit query beats git log. |
 
-**Storage note:** DB versioning requires the `screen_versions` and `screen_environments` tables. Mythik does not auto-create them; apply the declarative schema from `ai-context.md` Storage Setup in the consumer database before using versioned stores.
+**Storage note:** DB versioning requires the `screen_versions` and `screen_environments` tables. Runtime stores do not silently create them; initialize with `mythik init-store` or apply the DDL described in `ai-context.md` Storage Setup before using versioned stores.
 
 ---
 

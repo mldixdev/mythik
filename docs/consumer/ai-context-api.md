@@ -10,11 +10,37 @@ An ApiSpec defines a backend API declaratively — endpoints, catalogs, auth, au
 {
   "type": "api",
   "name": "My API",
+  "dialect": "postgres",
   "auth": { },
   "catalogs": { },
   "endpoints": { }
 }
 ```
+
+### Database dialect
+
+Set `dialect` on the ApiSpec when the server should compile generated CRUD, catalog, scope, and pagination SQL for a specific database. Supported values: `"sqlserver"`, `"postgres"`, `"mysql"`, `"sqlite"`. The database credentials stay in the host server config, not in the ApiSpec.
+
+```ts
+import { createServer } from 'mythik-server';
+
+const server = createServer({
+  spec: apiSpec,
+  database: { type: 'postgres', connectionString: process.env.DATABASE_URL },
+  auth: { jwt: { secret: process.env.JWT_SECRET! } },
+});
+```
+
+SQLite is useful for local demos, tests, and lightweight deployments:
+
+```ts
+createServer({
+  spec: { type: 'api', dialect: 'sqlite', endpoints: { /* ... */ } },
+  database: { type: 'sqlite', filename: './mythik.db' },
+});
+```
+
+SQL policy: write dialect-native SQL in `query`, `count`, provider queries, catalog `where`, and handlers. Mythik gives you named params (`@name`) and compiles them through the active driver; it does not translate a SQL Server query into PostgreSQL/MySQL/SQLite SQL at runtime. Generated CRUD/catalog/pagination/scope SQL is dialect-aware, but custom SQL remains owned by the ApiSpec author. MySQL generated upsert SQL uses the modern row-alias form and requires MySQL 8.0.19+; use SQLite/PostgreSQL/SQL Server or an explicit custom SQL path for older MySQL deployments.
 
 ### Catalogs
 
@@ -66,6 +92,22 @@ Four patterns:
   }
 }
 ```
+
+Handler context exposes the active SQL driver as `ctx.db`. Use it for custom logic instead of vendor-specific connection objects:
+
+```ts
+import type { Handler } from 'mythik-server';
+
+export const handler: Handler = async (ctx) => {
+  const rows = await ctx.db.query(
+    'SELECT id, name FROM Customers WHERE status = @status ORDER BY name',
+    { status: ctx.params.status ?? 'active' },
+  );
+  return { data: rows };
+};
+```
+
+`ctx.db` supports `query`, `exec`, `transaction`, `quoteIdent`, `compileNamedParams`, `paginate`, `countQuery`, `totalsQuery`, and dialect-aware insert/update/delete/upsert builders. Do not use `ctx.sql`, `ctx.db.request()`, `pool.request()`, `SCOPE_IDENTITY()`, backtick-only quoting, or bracket-only quoting in portable handlers. If a handler is intentionally dialect-specific, keep that decision local to the handler and document the required `ApiSpec.dialect`.
 
 **CRUD endpoint — one declaration, three routes:**
 
@@ -192,6 +234,8 @@ The `PUT` endpoint at `/api/items/:id` combined with the framework's auto-append
 ## API Rules
 
 - ApiSpec is pure declarative — no connection strings, no secrets (those go in `createServer` config)
+- `dialect` selects generated SQL behavior; credentials still live in host config
+- Custom SQL is dialect-native and uses Mythik named params (`@name`); Mythik does not translate custom SQL between dialects
 - Api-specs use `type: "api"` — never served to browser (404 on GET /api/screens/:id for type "api")
 - `query` and `handler` are mutually exclusive — use query for simple SQL, handler for complex logic
 - CRUD `insertable`/`updatable` define which fields can be written — fields not listed are rejected

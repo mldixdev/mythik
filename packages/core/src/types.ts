@@ -432,7 +432,7 @@ export interface TransactionBinding {
 }
 
 /** Union type for all event binding shapes */
-export type EventBinding = ActionBinding | ActionBinding[] | TransactionBinding;
+export type EventBinding = ActionBinding | TransactionBinding | Array<ActionBinding | TransactionBinding>;
 
 // --- Repeat ---
 

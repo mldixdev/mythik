@@ -14,13 +14,25 @@
 Public npm package names are unscoped:
 
 - Runtime/core: `mythik`
-- Browser-safe server helpers from core: `mythik/server`
+- Node/server helpers from core: `mythik/server`
 - React host/runtime: `mythik-react`
 - CLI binary package: `mythik-cli` (binary command: `mythik`)
 - Programmatic CLI API: `mythik-cli/api`
 - Node/Express server package: `mythik-server`
 
 Use `npm install mythik mythik-react` for a React app, `npm install -D mythik-cli` for CLI workflows, and add `mythik-server` only when building a Mythik-backed Node server. The `mythik` npm package bundles the AI documentation corpus under `node_modules/mythik/docs`; use `mythik docs path` to locate it after install or `mythik docs copy ./mythik-docs` to copy it into the current project.
+
+Server-side SQL helpers, SQL drivers, and SQL-backed spec stores are imported from `mythik/server`, not from the browser-safe `mythik` entry. Supported SQL dialects are `sqlserver`, `postgres`, `mysql`, and `sqlite`.
+
+Database runtime dependencies: SQL adapters (`mssql`, `pg`, `mysql2`, and `better-sqlite3`) are optional dependencies of `mythik` and install by default with npm/pnpm unless optional dependencies are omitted. If the host installs with optional dependencies disabled, add only the adapter you use:
+
+```bash
+npm install pg              # PostgreSQL
+npm install mysql2          # MySQL
+npm install better-sqlite3  # SQLite
+```
+
+MySQL support targets MySQL 8.0.19+ for generated upsert SQL. Older MySQL deployments need an explicit custom SQL path or another supported dialect.
 
 ## Spec Structure
 
@@ -88,6 +100,9 @@ Every screen is a flat tree: `root` ID + `elements` map + optional `initialActio
 ```bash
 mythik docs path                       # Locate bundled AI documentation
 mythik docs copy ./mythik-docs         # Copy docs for an AI agent / local review
+mythik init-store --dialect sqlite --target ./mythik.db  # Create local SQL store tables
+mythik init-store --dialect postgres --dry-run           # Print SQL store DDL for review/apply
+mythik init-store --dialect sqlserver --server localhost --database Mythik --user "$DB_USER" --password "$DB_PASSWORD" --encrypt false --trust-server-certificate
 mythik manifest <screen>               # See structural tree
 mythik elements <screen> <id1,id2>     # Get element details
 mythik patch <screen> --from-file patch.json  # Apply RFC 6902 patches
@@ -113,6 +128,36 @@ Do not edit database rows directly, do not call `SpecStore.save()` from app code
 **Patch input precedence:** explicit sources win. `--from-file <path>` reads that file even if the host process has non-TTY stdin (common in PowerShell/agent runners). Stdin still works via `--from-file -` or by piping without `--from-file`: `cat patch.json | mythik patch <id>`.
 
 All commands accept `--json`, `--table <name>`, `--store`, `--url`, `--key`. Never pass API keys inline — use `.mythikrc` + env vars.
+
+### CLI store configuration
+
+The CLI can read and write specs from `memory`, `file`, `supabase`, `sqlserver`, `postgres`, `mysql`, and `sqlite` stores. SQL stores share the same commands and the same required edit loop: `manifest -> elements -> patch -> validate`.
+
+```bash
+# SQLite: local development, tests, demos, lightweight deployments
+mythik init-store --dialect sqlite --target ./mythik.db
+mythik push floor-editor --from-file specs/floor-editor.json --store sqlite --filename ./mythik.db --author ai-agent
+mythik manifest floor-editor --store sqlite --filename ./mythik.db
+mythik elements floor-editor page,title --store sqlite --filename ./mythik.db
+mythik patch floor-editor --from-file patch.json --store sqlite --filename ./mythik.db --author ai-agent
+mythik validate floor-editor --store sqlite --filename ./mythik.db
+
+# PostgreSQL
+mythik init-store --dialect postgres --dry-run
+mythik patch floor-editor --from-file patch.json --store postgres --url "$DATABASE_URL" --author ai-agent
+
+# MySQL
+mythik init-store --dialect mysql --dry-run
+mythik patch floor-editor --from-file patch.json --store mysql --url "$DATABASE_URL" --author ai-agent
+
+# SQL Server
+mythik init-store --dialect sqlserver --server localhost --database Mythik --user "$DB_USER" --password "$DB_PASSWORD" --encrypt false --trust-server-certificate
+mythik patch floor-editor --from-file patch.json --store sqlserver --server localhost --database Mythik --user "$DB_USER" --password "$DB_PASSWORD" --author ai-agent
+```
+
+Environment equivalents: `MYTHIK_STORE`, `MYTHIK_DATABASE_URL`, `MYTHIK_SQLITE_FILE`, `MYTHIK_SQLSERVER_SERVER`, `MYTHIK_SQLSERVER_DATABASE`, `MYTHIK_SQLSERVER_USER`, `MYTHIK_SQLSERVER_PASSWORD`, `MYTHIK_SQLSERVER_PORT`, `MYTHIK_SQLSERVER_TRUSTED_CONNECTION`, `MYTHIK_TABLE`, `MYTHIK_VERSIONS_TABLE`, `MYTHIK_ENVIRONMENTS_TABLE`, and `MYTHIK_SNAPSHOT_INTERVAL`.
+
+`init-store --dry-run` prints the canonical idempotent DDL for the dialect. `init-store` can initialize reachable SQL stores directly, including SQL Server through explicit flags, while production teams may still apply the dry-run DDL through their normal deployment process. Runtime reads/writes do not silently create missing tables on first use.
 
 ### CLI is the only approved path for spec writes
 
@@ -301,6 +346,11 @@ Extended: `locale`, `notation` (compact/scientific), `signDisplay` (always/excep
 ```json
 { "$let": { "total": { "$array": "count", "source": { "$state": "/items" } } }, "$in": { "$ref": "total" } }
 ```
+`$ref` may also read nested values from an object binding with dot notation:
+```json
+{ "$let": { "user": { "$state": "/auth/user" } }, "$in": { "$ref": "user.name" } }
+```
+Inside the same `$let`, `$template` placeholders can read the same dotted binding paths, for example `${user.name}`.
 **JSONB array format** (when stored in DB, order matters):
 ```json
 { "$let": [["filtered", { "$array": "filter", "source": { "$state": "/items" }, "where": { "field": "status", "eq": "active" } }], ["count", { "$array": "count", "source": { "$ref": "filtered" } }]], "$in": { "$ref": "count" } }
@@ -341,11 +391,13 @@ All primitives accept `style`, `visible`, and `permission`. Tokens are project-d
 
 Wire to events with `on`: `{ "on": { "press": { "action": "...", "params": {...} } } }`
 
-Arrays execute sequentially: `"press": [action1, action2, action3]`
+Arrays execute sequentially: `"press": [action1, action2, action3]`. Arrays may mix normal action bindings and transaction bindings; each entry runs in order and transactions are awaited before the next entry.
 
 **Trap:** Action chains don't stop on failure — `validateForm` marks errors but does NOT halt the chain. Use `submitForm` with `formId` instead (validates + blocks if invalid). See [ai-context-patterns.md](ai-context-patterns.md).
 
 Add `"fireAndForget": true` to dispatch without waiting (background re-fetch after closing modal).
+
+Any action binding may include `params.skipIf`. Mythik resolves `skipIf` at dispatch time before resolving the rest of the params; when truthy, that action is skipped and the surrounding action chain continues.
 
 ### Action Reference
 
@@ -1135,35 +1187,46 @@ Quick reference: `type: "api"` at root, with `auth`, `catalogs`, `endpoints` obj
 
 ## Storage Setup
 
-Mythik stores specs in the consumer's database. Three tables are involved depending on which features the consumer opts into:
+Mythik stores specs in the consumer's selected store. Browser-safe stores (`MemorySpecStore`, `SupabaseSpecStore`, and their versioned/environment variants) are imported from `mythik`. Node-only SQL stores (`SqlSpecStore`, `SqlVersionedSpecStore`, `SqlEnvironmentStore`, `FileSpecStore`, and SQL Server compatibility classes) are imported from `mythik/server`.
 
-- **`screens`** (base, **REQUIRED**) — current spec per `id`. Used by every adapter (`SqlServerSpecStore`, `SupabaseSpecStore`, and the versioned subclasses which extend the base).
-- **`screen_versions`** (opt-in) — version history. Required only when using `SqlServerVersionedSpecStore` / `SupabaseVersionedSpecStore` (i.e., consumers calling `mythik push --author <name>` or `runPush({ author })`).
-- **`screen_environments`** (opt-in) — environment promotions. Required only when using `SqlServerEnvironmentStore` / `SupabaseEnvironmentStore`.
+SQL-backed stores support `sqlserver`, `postgres`, `mysql`, and `sqlite` through one `SqlDriver` boundary. The same three tables are involved across dialects:
 
-**The framework does NOT auto-create any of these tables.** Apply the schema below once during initial setup of the consumer's database, then the framework operates against the running tables.
+- **`screens`** (base, **REQUIRED**) — current spec per `id`. Used by every SQL/Supabase adapter.
+- **`screen_versions`** (opt-in but recommended) — version history. Required when the CLI runs with `--author`, when `runPush`/`runPatch` receives an `author`, or when code uses `SqlVersionedSpecStore` / `SupabaseVersionedSpecStore`.
+- **`screen_environments`** (opt-in but recommended) — environment promotions. Required for `history`, `diff`, `rollback`, `envs`, `promote`, and `SqlEnvironmentStore` / `SupabaseEnvironmentStore` workflows.
 
-**Authoritative since v0.1.0.** The framework's INSERT/SELECT/UPDATE statements (in `packages/core/src/spec-stores/sqlserver.ts`, `supabase.ts`, `sqlserver-versioned.ts`, `supabase-versioned.ts`) require these exact columns by name + semantic type. AI applying this schema in the consumer's environment MUST preserve all columns, constraints, and indexes; the SQL dialect is free to vary (NVARCHAR/VARCHAR/TEXT, BIT/BOOLEAN, DATETIME2/TIMESTAMPTZ — pick what the target DB supports).
+Use the CLI to bootstrap SQL store tables:
 
-**Versioned stores extend the base store.** When `SqlServerVersionedSpecStore.saveVersion(id, doc, meta)` runs, it appends to `screen_versions` AND calls the inherited base `save(id, doc)` which writes to `screens` (`packages/core/src/spec-stores/sqlserver-versioned.ts:110-111`). This means `screens` MUST exist for every consumer — there is no "versioning-only" mode that skips it.
+```bash
+mythik init-store --dialect sqlite --target ./mythik.db
+mythik init-store --dialect sqlserver --server localhost --database Mythik --user "$DB_USER" --password "$DB_PASSWORD" --encrypt false --trust-server-certificate
+mythik init-store --dialect postgres --dry-run
+mythik init-store --dialect mysql --dry-run
+```
+
+`init-store --dry-run` prints the canonical idempotent DDL. `init-store` can initialize reachable SQL stores directly, including SQL Server through explicit flags. Production teams may still apply the dry-run DDL through their normal database deployment path. Runtime store reads/writes do not silently create missing tables.
+
+**Authoritative since v0.1.0.** The framework's SQL stores require the columns below by name and meaning. Use the generated DDL where possible; if translating manually, preserve all columns, constraints, and uniqueness rules.
+
+**Versioned stores extend the base store.** When `SqlVersionedSpecStore.saveVersion(id, doc, meta)` or `SupabaseVersionedSpecStore.saveVersion(id, doc, meta)` runs, it appends to `screen_versions` and updates `screens`. This means `screens` MUST exist for every consumer — there is no "versioning-only" mode that skips it.
 
 ### Table 0 — `screens` (current spec — REQUIRED for all stores)
 
 | Column | Semantic type | Nullable | Default | Notes |
 |---|---|---|---|---|
 | `id` | short string (≤255) | NOT NULL | — | Spec identifier; PK. Framework reads/writes via `WHERE id = ?` |
-| `name` | short string (≤255) | NULL | — | Display name. Framework's INSERT populates with the same value as `id` (`sqlserver.ts:76` MERGE: `INSERT (id, name, spec, version, is_active) VALUES (@id, @id, @spec, 1, 1)`) |
-| `spec` | long string (≥1MB capacity) | NOT NULL | — | JSON-encoded current spec. SQL Server uses `NVARCHAR(MAX)` text + defensive parse (`sqlserver.ts:58`); Postgres / Supabase MUST be `jsonb` (see below) |
-| `version` | integer | NOT NULL | `1` | Incremented on every UPDATE (SQL Server: app-level at `sqlserver.ts:74`; Postgres: via TRIGGER, see below) |
-| `is_active` | boolean | NOT NULL | `true` | Framework's INSERT sets `1`/`true` (`sqlserver.ts:76`); UPDATE never touches it |
+| `name` | short string (≤255) | NULL | — | Display name. Framework inserts the same value as `id` by default. |
+| `spec` | JSON-capable long value | NOT NULL | — | Current spec. SQL Server and SQLite DDL store JSON as text; PostgreSQL uses `JSONB`; MySQL uses `JSON`. Generic SQL stores parse string values defensively. |
+| `version` | integer | NOT NULL | `1` | Incremented by the generic SQL store on every update. |
+| `is_active` | boolean | NOT NULL | `true` | Framework inserts active specs; current SQL store list operations do not filter by this column. |
 | `created_at` | UTC timestamp | — | — | OPTIONAL — framework does not read or write this column. If you add it for consumer hygiene (audit trail), make it `NOT NULL` with a NOW UTC default; otherwise omit entirely. |
-| `updated_at` | UTC timestamp | NOT NULL | NOW UTC | Required. Updated on every UPDATE (SQL Server: app-level via `updated_at = GETUTCDATE()` at `sqlserver.ts:74`; Postgres: via TRIGGER, see below). Framework's INSERT at `sqlserver.ts:76` omits this column, so initial value comes from the column DEFAULT. |
+| `updated_at` | UTC timestamp/string | NOT NULL | NOW UTC | Required. The generic SQL store writes this value on insert and update; the database default covers manual/bootstrap inserts. |
 
 **Constraints**:
 - `PRIMARY KEY (id)` — required (every framework query filters by `id`)
 
 **Indexes** (all RECOMMENDED, none framework-required):
-- `(is_active, id)` — useful for consumer queries filtering active screens. The framework's `list()` uses only `ORDER BY id` (`sqlserver.ts:83`, `supabase.ts:66`) and does not filter by `is_active`, so this index is consumer-hygiene only.
+- `(is_active, id)` — useful for consumer queries filtering active screens. The framework's `list()` uses only `ORDER BY id` and does not filter by `is_active`, so this index is consumer-hygiene only.
 
 ### Table 1 — `screen_versions` (version history — opt-in: VersionedSpecStore)
 
@@ -1201,20 +1264,22 @@ Mythik stores specs in the consumer's database. Three tables are involved depend
 **Constraints**:
 - `PRIMARY KEY (screen_id, environment)` — one promotion record per `(spec, env)` pair; re-promote upserts via MERGE/UPSERT
 
-### Postgres / Supabase: `jsonb` for `spec` and `patches`
+### JSON column policy
 
-On Postgres-flavored backends (Supabase, plain Postgres), the JSON columns MUST be `jsonb`, not `text`:
+Use the dialect-native JSON type when the dialect has one:
 
-- `screens.spec` — Supabase code path returns `rows[0].spec` directly (`packages/core/src/spec-stores/supabase.ts:41`) without `typeof === 'string' ? JSON.parse(...) : raw` defense. A `text` column would return a string and downstream consumers (e.g., `MythikInstance.getSpec`, `MythikRenderer`) would receive a stringified spec instead of an object.
-- `screen_versions.spec` and `screen_versions.patches` — Supabase versioned path consumes these as already-parsed objects from PostgREST (`packages/core/src/spec-stores/supabase-versioned.ts:132`, `:146`, `:149`); a `text` column would cause `applyPatches` / `structuredClone` to receive a string instead of an object, silent corruption.
+- PostgreSQL / Supabase: `JSONB`
+- MySQL: `JSON`
+- SQL Server: `NVARCHAR(MAX)`
+- SQLite: `TEXT`
 
-SQL Server stores parse `NVARCHAR(MAX)` defensively (`typeof === 'string' ? JSON.parse(...) : raw` at `sqlserver.ts:58`, `sqlserver-versioned.ts:133-135` and `:153`) and tolerate either form, but Postgres-flavored stores have no such defense.
+Generic SQL stores parse stored JSON defensively when the driver returns strings. Supabase's browser-safe REST stores consume PostgREST JSON as already-parsed objects, so Supabase tables should use `jsonb`, not `text`.
 
-### Postgres / Supabase: triggers for `screens.updated_at` and `screens.version`
+### Supabase trigger note
 
-On Postgres-flavored backends, `screens.updated_at` and `screens.version` MUST be maintained by `BEFORE UPDATE` triggers because the Supabase save path sends only the `spec` field (`packages/core/src/spec-stores/supabase.ts:55`: `body: JSON.stringify({ spec })`); it does NOT update `updated_at` or `version` itself. SQL Server stores set both columns app-level inside the MERGE (`sqlserver.ts:74`: `UPDATE SET spec = @spec, updated_at = GETUTCDATE(), version = version + 1`) and do not need triggers.
+Generic SQL stores write `screens.updated_at` and `screens.version` directly. Supabase's browser-safe REST store updates only the `spec` field, so Supabase projects should keep the `BEFORE UPDATE` triggers below if they want `updated_at` and `version` to advance on Supabase REST writes.
 
-Recommended trigger pair on Postgres:
+Recommended trigger pair on Supabase/PostgreSQL when using `SupabaseSpecStore`:
 
 ```sql
 CREATE OR REPLACE FUNCTION screens_update_updated_at()
@@ -1232,16 +1297,17 @@ CREATE TRIGGER screens_version_trigger
   FOR EACH ROW EXECUTE FUNCTION screens_increment_version();
 ```
 
-Trigger function names are arbitrary (use any unique name); the framework does not introspect them.
+Trigger function names are arbitrary (use any unique name); the framework does not introspect them. Plain PostgreSQL consumers using `SqlSpecStore` through `mythik/server` do not need these triggers for framework writes.
 
-`screen_versions` and `screen_environments` do NOT need such triggers — those tables are append-only / upsert-on-PK and the framework writes all columns explicitly on each INSERT/UPSERT (`supabase-versioned.ts:61-69`, `:77-85`, `:89-97`, `:243-249`).
+`screen_versions` and `screen_environments` do NOT need such triggers — those tables are append-only / upsert-on-PK and the framework writes all columns explicitly on each INSERT/UPSERT.
 
-### Idempotency requirement
+### Initialization and idempotency
 
-The applied DDL MUST be idempotent — re-running it on a database that already has the tables MUST NOT fail and MUST NOT recreate. Use the target dialect's "if not exists" form:
-- SQL Server: `IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '...') CREATE TABLE ...`
+`mythik init-store` uses canonical idempotent DDL, so re-running it on a database that already has the tables does not fail and does not recreate existing tables. If translating the DDL manually into a deployment script, preserve the target dialect's "if not exists" guard:
+- SQL Server: `IF OBJECT_ID(N'...', N'U') IS NULL CREATE TABLE ...`
 - Postgres / Supabase: `CREATE TABLE IF NOT EXISTS ...`
 - MySQL / MariaDB: `CREATE TABLE IF NOT EXISTS ...`
+- SQLite: `CREATE TABLE IF NOT EXISTS ...`
 
 ### Verification (post-apply)
 
@@ -1255,29 +1321,33 @@ WHERE TABLE_NAME IN ('screens', 'screen_versions', 'screen_environments')
 ORDER BY TABLE_NAME, ORDINAL_POSITION;
 ```
 
-Confirm: 7 columns for `screens` (`id`, `name`, `spec`, `version`, `is_active`, `created_at`, `updated_at`), 10 columns for `screen_versions` (`id` through `created_at`), 5 columns for `screen_environments` (`screen_id` through `promoted_by`). If any column is missing or has a wrong NULL/NOT NULL flag, abort and report — the framework's INSERT/SELECT/UPDATE will fail at runtime otherwise.
+Confirm: 6 required columns for `screens` (`id`, `name`, `spec`, `version`, `is_active`, `updated_at`), 10 columns for `screen_versions` (`id` through `created_at`), and 5 columns for `screen_environments` (`screen_id` through `promoted_by`). `created_at` on `screens` is optional. If any required column is missing or has a wrong NULL/NOT NULL flag, abort and report — the framework's INSERT/SELECT/UPDATE will fail at runtime otherwise.
 
-On Postgres / Supabase, additionally verify the two triggers on `screens` are present (`information_schema.triggers` WHERE `event_object_table = 'screens'`); without them, `updated_at` and `version` will silently stop advancing on save.
+On Supabase projects using `SupabaseSpecStore`, additionally verify the two triggers on `screens` are present (`information_schema.triggers` WHERE `event_object_table = 'screens'`); without them, `updated_at` and `version` will not advance on Supabase REST writes.
 
 ### Custom table names
 
 All three table names are independently configurable; overriding one does not require overriding the others:
 
 ```ts
-new SqlServerSpecStore({ ..., table: 'my_screens' })
-new SqlServerVersionedSpecStore({ ..., table: 'my_screens', versionsTable: 'my_versions' })
-new SqlServerEnvironmentStore({ ..., table: 'my_envs' })
+import { createSqlDriver, SqlEnvironmentStore, SqlSpecStore, SqlVersionedSpecStore } from 'mythik/server';
+
+const driver = createSqlDriver({ dialect: 'postgres', connection: process.env.DATABASE_URL });
+
+new SqlSpecStore({ driver, table: 'my_screens' });
+new SqlVersionedSpecStore({ driver, table: 'my_screens', versionsTable: 'my_versions' });
+new SqlEnvironmentStore({ driver, table: 'my_envs' });
 ```
 
-(`SqlServerVersionedSpecStore` accepts both `table` from the base config and `versionsTable` from its own config, since it extends `SqlServerSpecStore`.)
+`SqlVersionedSpecStore` accepts both `table` from the base config and `versionsTable` from its own config, since it extends `SqlSpecStore`.
 
 If a consumer overrides any name, AI applies the same schema under the consumer-chosen name.
 
-**Identifier safety scope**: SQL Server stores enforce `assertValidIdentifier` on every configured name (regex `/^[a-zA-Z_][a-zA-Z0-9_.]*$/`, max 128 chars — see `packages/core/src/security/identifier-guard.ts`). The validator is invoked in the constructor of `SqlServerSpecStore` (`sqlserver.ts:26`), `SqlServerVersionedSpecStore` (`sqlserver-versioned.ts:25`), and `SqlServerEnvironmentStore`. This blocks SQL injection via table-name interpolation in `[${table}]` / `[${versionsTable}]` template literals. Supabase stores do NOT validate any configured name (it flows directly into the REST URL via `${this.tableName}`); consumer code passing user-controlled table names to a Supabase store must validate them upstream.
+**Identifier safety scope**: generic SQL stores enforce identifier validation on configured table names (regex `/^[a-zA-Z_][a-zA-Z0-9_.]*$/`, max 128 chars). This blocks SQL injection via table-name interpolation before dialect quoting runs. Supabase stores do not validate configured table names; consumer code passing user-controlled table names to a Supabase store must validate them upstream.
 
-### Canonical reference (SQL Server)
+### Canonical reference
 
-A working SQL Server bootstrap script for the **versioning tables only** (`screen_versions` + `screen_environments`) exists at `Demos/Mythik/demo-sqlserver/setup-versioning.ts` (in the demos workspace, outside the framework repo). It implements those two tables idempotently using `mssql` directly and is the canonical reference if the AI is uncertain about idempotent SQL Server syntax. There is no separate canonical script for the base `screens` table — AI applies this spec directly (the base table is short enough that translating the spec to a `CREATE TABLE` statement is unambiguous). For non-SQL-Server targets, AI translates both the spec and (if useful) the versioning script's structure to the target dialect.
+The canonical SQL store DDL ships in the installed package. Use `mythik init-store --dialect <sqlserver|postgres|mysql|sqlite> --dry-run` or `getSqlStoreDdl(dialect)` from `mythik/server` to inspect it. Do not copy DDL from unrelated local artifacts.
 
 ### Schema evolution
 
@@ -1377,3 +1447,7 @@ When the framework changes the schema in a future version, this section will gai
 87. DNA numeric seeds (`roundness`, `density`, `depth`, `formality`) are canonical `0–1` values. Generate `0.7`, not `70`. The runtime tolerates legacy `0–100` values by normalizing any numeric seed greater than `1` with `/100` during DNA derivation, including initial AppSpec load and runtime `updateTokens`.
 88. API query endpoints can combine `pagination: "offset"` with `scopeFilter`. For generated counts, Mythik applies the scope filter to the source query before `COUNT(*)`, so paginated totals remain tenant-scoped. Prefer generated counts. If a custom `endpoint.count` is truly needed with `scopeFilter`, include `{{scopeWhere[:alias]}}` or `{{scopeAnd[:alias]}}`; Mythik expands the macro to the correct scope predicate and removes it for bypass roles. Other custom count SQL is left verbatim. Use `:alias` for JOIN/subquery counts, and do not reference internal scope params directly.
 89. Transaction `confirm` failures from `fetch` preserve backend error details for `onError`. Read `/tx/error/message` for the best available message; when the backend returns `{ error: { code, message } }`, Mythik keeps that message, `code`, HTTP `status`, and raw `data` after rollback. Do not parse `/ui/lastError` from transaction specs.
+90. For SQL-backed stores and servers, use the generic `mythik/server` SQL boundary. Initialize tables with `mythik init-store --dialect <sqlserver|postgres|mysql|sqlite>` or inspect DDL with `--dry-run`; configure the CLI with `--store`, `--url`/`--filename`/SQL Server flags, or `MYTHIK_*` environment variables; and keep spec edits on the required `manifest -> elements -> patch --from-file -> validate` loop. Write custom API SQL in the selected dialect with Mythik named params (`@name`); Mythik does not translate custom SQL between dialects.
+91. Event arrays may mix normal actions and transaction bindings. Mythik executes them sequentially and awaits each transaction before continuing. Use this when a flow needs a small action before or after an optimistic transaction; do not wrap a transaction inside another transaction phase.
+92. `$ref` and `$template` placeholders can read nested values from `$let` object bindings with dot notation, for example `{ "$ref": "user.name" }` or `${user.name}`. If a dotted `$ref` segment is missing, runtime throws an unknown `$ref` error rather than silently returning undefined.
+93. Use `params.skipIf` for a dispatch-time action guard when an action should be skipped but the surrounding action chain should continue. `skipIf` is resolved before other params and is removed before the action handler runs. Do not use `skipIf` as a substitute for form validation or transaction rollback.

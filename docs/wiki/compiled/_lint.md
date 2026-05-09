@@ -1,6 +1,6 @@
-# Lint Report - Publish Readiness Refresh
+# Lint Report - Event Binding Guard Refresh
 
-Validation of cross-references, stale public references, and generated wiki shape after refreshing `docs/wiki/compiled` from `docs/consumer`.
+Validation of cross-references, stale public references, and generated wiki shape after refreshing the compiled wiki delta from `docs/consumer` on 2026-05-09.
 
 ## Broken Cross-References
 
@@ -26,6 +26,11 @@ Validation of cross-references, stale public references, and generated wiki shap
 
 ## Key Refresh Additions
 
+- Dotted `$let` binding reads for `$ref` and `$template`
+- Mixed event arrays containing actions plus transactions
+- `params.skipIf` dispatch-time action guards
+- Optional SQL adapter dependency wording
+- Generic SQL store / driver package-layout pages
 - `concept-public-package-names`
 - `cli-existing-spec-edit-loop`
 - `primitive-spatial-map`

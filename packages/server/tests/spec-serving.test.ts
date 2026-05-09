@@ -1,34 +1,38 @@
 import { describe, it, expect, vi } from 'vitest';
-import { checkScreensTable, buildSpecServingRoutes, stripSensitiveFields } from '../src/spec-serving.js';
+import type { SqlDriver } from 'mythik/server';
+import { checkScreensTable, buildSpecServingRoutes, discoverAppSpecs, stripSensitiveFields } from '../src/spec-serving.js';
 
-function mockPoolForCheck(queryResult: unknown) {
-  const mockRequest = {
-    input: vi.fn().mockReturnThis(),
-    query: vi.fn().mockResolvedValue(queryResult),
-  };
-  return { request: () => mockRequest };
+function mockDriver(options: {
+  tableExists?: boolean;
+  tableExistsError?: Error;
+  queryRows?: Record<string, unknown>[];
+} = {}): SqlDriver {
+  return {
+    tableExists: options.tableExistsError
+      ? vi.fn().mockRejectedValue(options.tableExistsError)
+      : vi.fn().mockResolvedValue(options.tableExists ?? true),
+    query: vi.fn().mockResolvedValue(options.queryRows ?? []),
+    quoteIdent: (identifier: string) => `"${identifier}"`,
+  } as unknown as SqlDriver;
 }
 
 describe('checkScreensTable', () => {
   it('returns true when table exists', async () => {
-    const mockPool = mockPoolForCheck({ recordset: [{ TABLE_NAME: 'screens' }] });
-    const exists = await checkScreensTable(mockPool as never, 'screens');
+    const driver = mockDriver({ tableExists: true });
+    const exists = await checkScreensTable(driver, 'screens');
     expect(exists).toBe(true);
+    expect(driver.tableExists).toHaveBeenCalledWith('screens');
   });
 
   it('returns false when table does not exist', async () => {
-    const mockPool = mockPoolForCheck({ recordset: [] });
-    const exists = await checkScreensTable(mockPool as never, 'screens');
+    const driver = mockDriver({ tableExists: false });
+    const exists = await checkScreensTable(driver, 'screens');
     expect(exists).toBe(false);
   });
 
   it('returns false on query error (graceful)', async () => {
-    const mockRequest = {
-      input: vi.fn().mockReturnThis(),
-      query: vi.fn().mockRejectedValue(new Error('connection lost')),
-    };
-    const mockPool = { request: () => mockRequest };
-    const exists = await checkScreensTable(mockPool as never, 'screens');
+    const driver = mockDriver({ tableExistsError: new Error('connection lost') });
+    const exists = await checkScreensTable(driver, 'screens');
     expect(exists).toBe(false);
   });
 });
@@ -36,79 +40,71 @@ describe('checkScreensTable', () => {
 describe('buildSpecServingRoutes', () => {
   it('loadScreen returns parsed spec', async () => {
     const specData = { root: 'page', elements: { page: { type: 'box' } } };
-    const mockPool = {
-      request: () => ({
-        input: vi.fn().mockReturnThis(),
-        query: vi.fn().mockResolvedValue({ recordset: [{ spec: JSON.stringify(specData) }] }),
-      }),
-    };
-    const routes = buildSpecServingRoutes(mockPool as never, 'screens');
+    const driver = mockDriver({ queryRows: [{ spec: JSON.stringify(specData) }] });
+    const routes = buildSpecServingRoutes(driver, 'screens');
     const result = await routes.loadScreen('task-manager');
     expect(result).toEqual(specData);
+    expect(driver.query).toHaveBeenCalledWith(
+      'SELECT "spec" FROM "screens" WHERE "id" = @id',
+      { id: 'task-manager' },
+    );
   });
 
   it('loadScreen returns null for missing screen', async () => {
-    const mockPool = {
-      request: () => ({
-        input: vi.fn().mockReturnThis(),
-        query: vi.fn().mockResolvedValue({ recordset: [] }),
-      }),
-    };
-    const routes = buildSpecServingRoutes(mockPool as never, 'screens');
+    const driver = mockDriver({ queryRows: [] });
+    const routes = buildSpecServingRoutes(driver, 'screens');
     const result = await routes.loadScreen('nonexistent');
     expect(result).toBeNull();
   });
 
   it('loadApp returns spec only if type is app', async () => {
     const appSpec = { type: 'app', name: 'my-app' };
-    const mockPool = {
-      request: () => ({
-        input: vi.fn().mockReturnThis(),
-        query: vi.fn().mockResolvedValue({ recordset: [{ spec: JSON.stringify(appSpec) }] }),
-      }),
-    };
-    const routes = buildSpecServingRoutes(mockPool as never, 'screens');
+    const driver = mockDriver({ queryRows: [{ spec: JSON.stringify(appSpec) }] });
+    const routes = buildSpecServingRoutes(driver, 'screens');
     const result = await routes.loadApp('app-demo');
     expect(result).toEqual(appSpec);
   });
 
   it('loadApp returns null for non-app spec', async () => {
     const screenSpec = { root: 'page', elements: {} };
-    const mockPool = {
-      request: () => ({
-        input: vi.fn().mockReturnThis(),
-        query: vi.fn().mockResolvedValue({ recordset: [{ spec: JSON.stringify(screenSpec) }] }),
-      }),
-    };
-    const routes = buildSpecServingRoutes(mockPool as never, 'screens');
+    const driver = mockDriver({ queryRows: [{ spec: JSON.stringify(screenSpec) }] });
+    const routes = buildSpecServingRoutes(driver, 'screens');
     const result = await routes.loadApp('task-manager');
     expect(result).toBeNull();
   });
 
   it('loadScreen returns null for type: "api" specs (never served to browser)', async () => {
     const apiSpec = { type: 'api', endpoints: {} };
-    const mockPool = {
-      request: () => ({
-        input: vi.fn().mockReturnThis(),
-        query: vi.fn().mockResolvedValue({ recordset: [{ spec: JSON.stringify(apiSpec) }] }),
-      }),
-    };
-    const routes = buildSpecServingRoutes(mockPool as never, 'screens');
+    const driver = mockDriver({ queryRows: [{ spec: JSON.stringify(apiSpec) }] });
+    const routes = buildSpecServingRoutes(driver, 'screens');
     const result = await routes.loadScreen('my-api');
     expect(result).toBeNull();
   });
 
   it('loadApp returns null for type: "api" specs', async () => {
     const apiSpec = { type: 'api', endpoints: {} };
-    const mockPool = {
-      request: () => ({
-        input: vi.fn().mockReturnThis(),
-        query: vi.fn().mockResolvedValue({ recordset: [{ spec: JSON.stringify(apiSpec) }] }),
-      }),
-    };
-    const routes = buildSpecServingRoutes(mockPool as never, 'screens');
+    const driver = mockDriver({ queryRows: [{ spec: JSON.stringify(apiSpec) }] });
+    const routes = buildSpecServingRoutes(driver, 'screens');
     const result = await routes.loadApp('my-api');
     expect(result).toBeNull();
+  });
+});
+
+describe('discoverAppSpecs', () => {
+  it('discovers app specs and login screens through the driver', async () => {
+    const appSpec = { type: 'app', navigation: { auth: { loginScreen: 'login' } } };
+    const driver = mockDriver({
+      queryRows: [
+        { id: 'main-app', spec: JSON.stringify(appSpec) },
+        { id: 'api-spec', spec: JSON.stringify({ type: 'api' }) },
+        { id: 'plain-screen', spec: JSON.stringify({ root: 'page' }) },
+      ],
+    });
+
+    const apps = await discoverAppSpecs(driver, 'screens');
+
+    expect(apps).toEqual([{ id: 'main-app', loginScreen: 'login' }]);
+    expect(driver.query).toHaveBeenCalledWith('SELECT "id", "spec" FROM "screens"');
   });
 });
 

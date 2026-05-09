@@ -1,14 +1,14 @@
 import express from 'express';
-import mssql, { type ConnectionPool, type IResult } from 'mssql';
 import type { ApiSpec, MythikServer, MythikServerConfig, Handler, EndpointConfig, ParamConfig, UserContext } from './types.js';
+import type { SqlDriver, SqlMutationResult, SqlStatement } from 'mythik/server';
 import type { AuthConfig, ScopeFilterConfig, EndpointScopeOverride } from './auth/types.js';
 import { validateApiSpec } from './validation/spec-validator.js';
-import { createConnectionPool } from './connection.js';
+import { createDatabaseDriver, resolveDatabaseDialect } from './connection.js';
 import { buildCatalogQuery } from './catalog-builder.js';
-import { parseParamValue, getSqlType, buildPaginatedQuery, buildEndpointCountQuery, buildTotalsQuery } from './query-engine.js';
-import { filterFields, buildInsertQuery, buildUpdateQuery, buildDeleteQuery } from './crud-builder.js';
+import { parseParamValue, buildPaginatedQuery, buildEndpointCountQuery, buildTotalsQuery } from './query-engine.js';
+import { filterFields, buildInsertQuery, buildUpdateQuery, buildDeleteQuery, buildSelectByPrimaryKeyQuery } from './crud-builder.js';
 import { injectAuditFields } from './audit.js';
-import { checkScreensTable, buildSpecServingRoutes, stripSensitiveFields } from './spec-serving.js';
+import { checkScreensTable, buildSpecServingRoutes, discoverAppSpecs, stripSensitiveFields } from './spec-serving.js';
 import { createJwtStrategy } from './auth/jwt-strategy.js';
 import { discoverHandlers, getHandlerRefs, validateHandlerRefs } from './handler-loader.js';
 import { createErrorHandler } from './middleware/error-handler.js';
@@ -52,7 +52,7 @@ async function resolveSpec(config: MythikServerConfig): Promise<ApiSpec> {
 
 export function createServer(config: MythikServerConfig): MythikServer {
   const app = express();
-  let pool: ConnectionPool | null = null;
+  let db: SqlDriver | null = null;
   let httpServer: Server | null = null;
 
   async function start(port?: number): Promise<void> {
@@ -64,7 +64,10 @@ export function createServer(config: MythikServerConfig): MythikServer {
     }
 
     // 2. Resolve env vars and connect to DB
-    pool = await createConnectionPool(resolveEnvVars(config.database));
+    const databaseConfig = resolveEnvVars(config.database as unknown as Record<string, unknown>) as unknown as MythikServerConfig['database'];
+    const dbDriver = createDatabaseDriver(databaseConfig, spec.dialect);
+    await dbDriver.connect();
+    db = dbDriver;
 
     const specDir = typeof config.spec === 'string' ? path.dirname(path.resolve(config.spec)) : process.cwd();
 
@@ -97,9 +100,9 @@ export function createServer(config: MythikServerConfig): MythikServer {
     const defaultPolicy = fullAuthConfig ? undefined : 'public'; // no auth config = all public
 
     // 4c. Built-in login provider (when auth.provider is configured)
-    if (spec.auth?.provider && jwtConfig && pool) {
+    if (spec.auth?.provider && jwtConfig) {
       const jwtWithClaims = { ...jwtConfig, claims: spec.auth.claims };
-      const dbProvider = createDbAuthProvider(spec.auth.provider, jwtWithClaims, pool);
+      const dbProvider = createDbAuthProvider(spec.auth.provider, jwtWithClaims, dbDriver);
 
       app.post('/api/auth/login', async (req, res, next) => {
         try {
@@ -145,14 +148,14 @@ export function createServer(config: MythikServerConfig): MythikServer {
               return;
             }
 
-            const catalogSql = buildCatalogQuery(catalogConfig);
+            const catalogSql = buildCatalogQuery(db!, catalogConfig);
             if (!catalogSql) {
               res.json([]);
               return;
             }
 
-            const result = await pool!.request().query(catalogSql);
-            res.json(result.recordset);
+            const result = await db!.query(catalogSql);
+            res.json(result);
           } catch (err) {
             next(err);
           }
@@ -165,17 +168,17 @@ export function createServer(config: MythikServerConfig): MythikServer {
     const specServingConfig = config.specServing;
     if (specServingConfig !== false) {
       const tableName = typeof specServingConfig === 'object' ? specServingConfig.table : 'screens';
-      const tableExists = await checkScreensTable(pool, tableName);
+      const tableExists = await checkScreensTable(db, tableName);
 
       if (tableExists) {
-        const serving = buildSpecServingRoutes(pool, tableName);
+        const serving = buildSpecServingRoutes(db, tableName);
 
         // Auto-detect public screens: AppSpecs are always public (needed for bootstrap),
         // and each AppSpec's loginScreen is also public (must load before auth).
         // All other screens require authentication.
         const publicScreenIds = new Set<string>();
         if (fullAuthConfig) {
-          const appSpecs = await discoverAppSpecs(pool, tableName);
+          const appSpecs = await discoverAppSpecs(db, tableName);
           for (const { id, loginScreen } of appSpecs) {
             publicScreenIds.add(id);
             if (loginScreen) publicScreenIds.add(loginScreen);
@@ -253,7 +256,7 @@ export function createServer(config: MythikServerConfig): MythikServer {
     // 7. Endpoint routes
     if (spec.endpoints) {
       for (const [, endpointConfig] of Object.entries(spec.endpoints)) {
-        registerEndpoint(app, pool, endpointConfig, handlers, authMiddleware, defaultPolicy, fullAuthConfig ?? undefined);
+        registerEndpoint(app, db, endpointConfig, handlers, authMiddleware, defaultPolicy, fullAuthConfig ?? undefined);
       }
     }
 
@@ -274,9 +277,9 @@ export function createServer(config: MythikServerConfig): MythikServer {
       await new Promise<void>((resolve) => httpServer!.close(() => resolve()));
       httpServer = null;
     }
-    if (pool) {
-      await pool.close();
-      pool = null;
+    if (db) {
+      await db.close();
+      db = null;
     }
   }
 
@@ -285,32 +288,6 @@ export function createServer(config: MythikServerConfig): MythikServer {
   }
 
   return { start, stop, getApp };
-}
-
-// --- App spec discovery (for public screen detection) ---
-
-async function discoverAppSpecs(
-  pool: ConnectionPool,
-  tableName: string,
-): Promise<Array<{ id: string; loginScreen: string | null }>> {
-  try {
-    const result = await pool.request()
-      .query(`SELECT id, spec FROM [${tableName}]`);
-
-    const appSpecs: Array<{ id: string; loginScreen: string | null }> = [];
-    for (const row of result.recordset as Array<{ id: string; spec: unknown }>) {
-      const spec = typeof row.spec === 'string' ? JSON.parse(row.spec) : row.spec;
-      if (spec?.type === 'app') {
-        appSpecs.push({
-          id: row.id,
-          loginScreen: spec.navigation?.auth?.loginScreen ?? null,
-        });
-      }
-    }
-    return appSpecs;
-  } catch {
-    return [];
-  }
 }
 
 // --- Scope filter helpers ---
@@ -333,15 +310,14 @@ function getUserFromReq(req: express.Request): UserContext | null {
   return (req as unknown as Record<string, unknown>).user as UserContext | null;
 }
 
-function applyScopeToQuery(
+function resolveScopeClauseForRequest(
   req: express.Request,
   res: express.Response,
   scopeFilterConfig: ScopeFilterConfig,
-  dataQuery: string,
-  dataRequest: ReturnType<ConnectionPool['request']>,
-): string | null {
+  db: SqlDriver,
+): ReturnType<typeof buildScopeWhereClause> | undefined {
   const user = getUserFromReq(req);
-  if (!user) return dataQuery;
+  if (!user) return null;
 
   // Handle "select" mode — validate active scope
   let activeScope: unknown = undefined;
@@ -350,29 +326,23 @@ function applyScopeToQuery(
     activeScope = resolveActiveScope(headerVal, scopeFilterConfig.type);
     if (activeScope === null) {
       res.status(400).json({ error: { code: 'SCOPE_REQUIRED', message: 'Active scope header is required' } });
-      return null; // signal to caller to stop
+      return undefined; // signal to caller to stop
     }
     const bypassRoles = scopeFilterConfig.bypassRoles ?? [];
     if (!user.scope.includes(activeScope) && !bypassRoles.some(r => user.roles.includes(r))) {
       res.status(403).json({ error: { code: 'SCOPE_VIOLATION', message: 'Active scope not in allowed values' } });
-      return null;
+      return undefined;
     }
   }
 
-  const scopeClause = buildScopeWhereClause(scopeFilterConfig, user.scope, activeScope, user.roles);
-  if (!scopeClause) return dataQuery; // bypass role
-
-  for (const [key, value] of Object.entries(scopeClause.params)) {
-    dataRequest.input(key, value);
-  }
-  return wrapQueryWithScopeFilter(dataQuery, scopeClause);
+  return buildScopeWhereClause(scopeFilterConfig, user.scope, activeScope, user.roles, { driver: db });
 }
 
 // --- Endpoint registration ---
 
 function registerEndpoint(
   app: express.Express,
-  pool: ConnectionPool,
+  db: SqlDriver,
   endpoint: EndpointConfig,
   handlers: Map<string, Handler>,
   authMiddleware: ((policy?: string) => express.RequestHandler) | null,
@@ -403,113 +373,69 @@ function registerEndpoint(
           ? (parseParamValue(req.query.pageSize as string, 'int', params.pageSize?.max) as number ?? (params.pageSize?.default as number) ?? 20)
           : 0;
 
+        const scopeClause = scopeFilterConfig ? resolveScopeClauseForRequest(req, res, scopeFilterConfig, db) : null;
+        if (scopeClause === undefined) return; // response already sent (error)
+        const queryParams = scopeClause ? { ...paramValues, ...scopeClause.params } : paramValues;
+
         // Build parallel queries
-        const queries: Promise<IResult<Record<string, unknown>>>[] = [];
+        const queries: Promise<Record<string, unknown>[]>[] = [];
 
         // Data query
-        const dataRequest = pool.request();
-        bindAllParams(dataRequest, params, paramValues);
-        let dataQuery: string;
+        let dataQuery = endpoint.query!;
+        if (scopeClause) {
+          dataQuery = wrapQueryWithScopeFilter(dataQuery, scopeClause);
+        }
         if (hasPagination) {
-          dataQuery = buildPaginatedQuery(endpoint.query!);
-          dataRequest.input('_offset', mssql.Int, page * pageSize);
-          dataRequest.input('_pageSize', mssql.Int, pageSize);
-        } else {
-          dataQuery = endpoint.query!;
+          dataQuery = buildPaginatedQuery(dataQuery, {
+            driver: db,
+            limit: pageSize,
+            offset: page * pageSize,
+          });
         }
 
-        // Apply scope filter to data query
-        if (scopeFilterConfig) {
-          const filtered = applyScopeToQuery(req, res, scopeFilterConfig, dataQuery, dataRequest);
-          if (filtered === null) return; // response already sent (error)
-          dataQuery = filtered;
-        }
-
-        queries.push(dataRequest.query(dataQuery));
+        queries.push(db.query(dataQuery, queryParams));
 
         // Count query (if pagination)
         if (hasPagination) {
-          const countRequest = pool.request();
-          bindAllParams(countRequest, params, paramValues);
-
-          // Apply scope filter to count query too
-          let countClause: ReturnType<typeof buildScopeWhereClause> | null = null;
-          if (scopeFilterConfig) {
-            const user = getUserFromReq(req);
-            if (user) {
-              let activeScope: unknown = undefined;
-              if (scopeFilterConfig.mode === 'select') {
-                activeScope = resolveActiveScope(
-                  req.headers[scopeFilterConfig.header!.toLowerCase()] as string | undefined,
-                  scopeFilterConfig.type,
-                );
-              }
-              countClause = buildScopeWhereClause(scopeFilterConfig, user.scope, activeScope, user.roles);
-              if (countClause) {
-                for (const [key, value] of Object.entries(countClause.params)) {
-                  countRequest.input(key, value);
-                }
-              }
-            }
-          }
-
           const countSql = buildEndpointCountQuery(endpoint.query!, {
+            driver: db,
             customCount: endpoint.count,
-            ...(countClause ? { scopeClause: countClause } : {}),
+            ...(scopeClause ? { scopeClause } : {}),
           });
 
-          queries.push(countRequest.query(countSql));
+          queries.push(db.query(countSql, queryParams));
         }
 
         // Totals query
         if (endpoint.totals) {
-          const totalsRequest = pool.request();
-          bindAllParams(totalsRequest, params, paramValues);
           let totalsSql = typeof endpoint.totals === 'string'
             ? endpoint.totals
-            : buildTotalsQuery(endpoint.query!, endpoint.totals);
+            : buildTotalsQuery(endpoint.query!, endpoint.totals, { driver: db });
 
-          // Apply scope filter to totals query too
-          if (totalsSql && scopeFilterConfig) {
-            const user = getUserFromReq(req);
-            if (user) {
-              let activeScope: unknown = undefined;
-              if (scopeFilterConfig.mode === 'select') {
-                activeScope = resolveActiveScope(
-                  req.headers[scopeFilterConfig.header!.toLowerCase()] as string | undefined,
-                  scopeFilterConfig.type,
-                );
-              }
-              const totalsClause = buildScopeWhereClause(scopeFilterConfig, user.scope, activeScope, user.roles);
-              if (totalsClause) {
-                totalsSql = wrapQueryWithScopeFilter(totalsSql, totalsClause);
-                for (const [key, value] of Object.entries(totalsClause.params)) {
-                  totalsRequest.input(key, value);
-                }
-              }
-            }
+          if (totalsSql && scopeClause) {
+            totalsSql = wrapQueryWithScopeFilter(totalsSql, scopeClause);
           }
 
           if (totalsSql) {
-            queries.push(totalsRequest.query(totalsSql));
+            queries.push(db.query(totalsSql, queryParams));
           }
         }
 
         const results = await Promise.all(queries);
         const dataResult = results[0];
 
-        const response: Record<string, unknown> = { data: dataResult.recordset };
+        const response: Record<string, unknown> = { data: dataResult };
 
         if (hasPagination && results[1]) {
           const countResult = results[1];
-          response.total = (countResult.recordset[0] as Record<string, unknown>)?._total ?? 0;
+          response.total = countResult[0]?._total ?? countResult[0]?.total ?? 0;
           response.page = page;
           response.pageSize = pageSize;
         }
 
         if (endpoint.totals && results[hasPagination ? 2 : 1]) {
           const totalsResult = results[hasPagination ? 2 : 1];
-          response.totals = totalsResult.recordset[0] ?? {};
+          response.totals = totalsResult[0] ?? {};
         }
 
         res.json(response);
@@ -530,8 +456,7 @@ function registerEndpoint(
 
         const result = await handler({
           params: paramValues,
-          db: pool,
-          sql: { Int: mssql.Int, Float: mssql.Float, Bit: mssql.Bit, NVarChar: mssql.NVarChar, DateTime: mssql.DateTime },
+          db,
           user: getUserFromReq(req) ?? null,
           query: req.query as Record<string, string>,
           body: req.body,
@@ -577,13 +502,14 @@ function registerEndpoint(
           res.status(400).json({ error: { code: 'VALIDATION_FAILED', message: 'No valid fields in request body' } });
           return;
         }
-        const { sql: insertSql, params: insertParams } = buildInsertQuery(crud.table, fields, crud.primaryKey);
-        const request = pool.request();
-        for (const [key, value] of Object.entries(insertParams)) {
-          request.input(key, value);
-        }
-        const result = await request.query(insertSql);
-        res.status(201).json(result.recordset[0] ?? fields);
+        const { sql: insertSql, params: insertParams } = buildInsertQuery(db, crud.table, fields);
+        const result = await db.exec(insertSql, insertParams);
+        const pkValue = primaryKeyValueForInsert(crud.primaryKey, fields, result);
+        const created = result.rows[0]
+          ?? (db.capabilities.returning === false && pkValue !== undefined
+            ? await loadCrudRecord(db, crud, pkValue)
+            : undefined);
+        res.status(201).json(created ?? responseFallback(crud.primaryKey, pkValue, fields));
       } catch (err) { next(err); }
     });
     app.post(endpoint.path, ...postHandlers);
@@ -602,11 +528,7 @@ function registerEndpoint(
           res.status(400).json({ error: { code: 'VALIDATION_FAILED', message: 'No valid fields in request body' } });
           return;
         }
-        let { sql: updateSql, params: updateParams } = buildUpdateQuery(crud.table, crud.primaryKey, req.params.id, fields);
-        const request = pool.request();
-        for (const [key, value] of Object.entries(updateParams)) {
-          request.input(key, value);
-        }
+        let scopedWhere: SqlStatement | undefined;
 
         // Scope filter: restrict update to user's scope
         if (scopeFilterConfig) {
@@ -619,26 +541,32 @@ function registerEndpoint(
                 scopeFilterConfig.type,
               );
             }
-            const scopeClause = buildScopeWhereClause(scopeFilterConfig, user.scope, activeScope, user.roles);
-            if (scopeClause) {
-              // Append scope condition to WHERE clause
-              updateSql = updateSql.replace(
-                /WHERE\s+/i,
-                `WHERE ${scopeClause.sql} AND `,
-              );
-              for (const [key, value] of Object.entries(scopeClause.params)) {
-                request.input(key, value);
-              }
-            }
+            const scopeClause = buildScopeWhereClause(scopeFilterConfig, user.scope, activeScope, user.roles, {
+              driver: db,
+              qualifier: null,
+            });
+            if (scopeClause) scopedWhere = scopeClause;
           }
         }
 
-        const result = await request.query(updateSql);
-        if (!result.recordset[0]) {
+        const { sql: updateSql, params: updateParams } = buildUpdateQuery(
+          db,
+          crud.table,
+          crud.primaryKey,
+          req.params.id,
+          fields,
+          scopedWhere,
+        );
+        const result = await db.exec(updateSql, updateParams);
+        const updated = result.rows[0]
+          ?? (db.capabilities.returning === false
+            ? await loadCrudRecord(db, crud, req.params.id, scopedWhere)
+            : undefined);
+        if (!updated) {
           res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Record not found' } });
           return;
         }
-        res.json(result.recordset[0]);
+        res.json(updated);
       } catch (err) { next(err); }
     });
     app.put(`${endpoint.path}/:id`, ...putHandlers);
@@ -648,11 +576,7 @@ function registerEndpoint(
     if (authHandler) deleteHandlers.push(authHandler);
     deleteHandlers.push(async (req, res, next) => {
       try {
-        let { sql: deleteSql, params: deleteParams } = buildDeleteQuery(crud.table, crud.primaryKey, req.params.id);
-        const request = pool.request();
-        for (const [key, value] of Object.entries(deleteParams)) {
-          request.input(key, value);
-        }
+        let scopedWhere: SqlStatement | undefined;
 
         // Scope filter: restrict delete to user's scope
         if (scopeFilterConfig) {
@@ -665,21 +589,23 @@ function registerEndpoint(
                 scopeFilterConfig.type,
               );
             }
-            const scopeClause = buildScopeWhereClause(scopeFilterConfig, user.scope, activeScope, user.roles);
-            if (scopeClause) {
-              deleteSql = deleteSql.replace(
-                /WHERE\s+/i,
-                `WHERE ${scopeClause.sql} AND `,
-              );
-              for (const [key, value] of Object.entries(scopeClause.params)) {
-                request.input(key, value);
-              }
-            }
+            const scopeClause = buildScopeWhereClause(scopeFilterConfig, user.scope, activeScope, user.roles, {
+              driver: db,
+              qualifier: null,
+            });
+            if (scopeClause) scopedWhere = scopeClause;
           }
         }
 
-        const result = await request.query(deleteSql);
-        if (result.rowsAffected[0] === 0) {
+        const { sql: deleteSql, params: deleteParams } = buildDeleteQuery(
+          db,
+          crud.table,
+          crud.primaryKey,
+          req.params.id,
+          scopedWhere,
+        );
+        const result = await db.exec(deleteSql, deleteParams);
+        if (result.affectedRows === 0) {
           res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Record not found' } });
           return;
         }
@@ -688,6 +614,36 @@ function registerEndpoint(
     });
     app.delete(`${endpoint.path}/:id`, ...deleteHandlers);
   }
+}
+
+async function loadCrudRecord(
+  db: SqlDriver,
+  crud: { table: string; primaryKey: string },
+  primaryKeyValue: unknown,
+  extraWhere?: SqlStatement,
+): Promise<Record<string, unknown> | undefined> {
+  const { sql, params } = buildSelectByPrimaryKeyQuery(db, crud.table, crud.primaryKey, primaryKeyValue, extraWhere);
+  const rows = await db.query(sql, params);
+  return rows[0];
+}
+
+function primaryKeyValueForInsert(
+  primaryKey: string,
+  fields: Record<string, unknown>,
+  result: SqlMutationResult,
+): unknown {
+  return Object.prototype.hasOwnProperty.call(fields, primaryKey)
+    ? fields[primaryKey]
+    : result.insertId;
+}
+
+function responseFallback(
+  primaryKey: string,
+  primaryKeyValue: unknown,
+  fields: Record<string, unknown>,
+): Record<string, unknown> {
+  if (primaryKeyValue === undefined) return fields;
+  return { [primaryKey]: primaryKeyValue, ...fields };
 }
 
 function extractParamValues(
@@ -730,13 +686,6 @@ function validateRequiredParams(params: Record<string, ParamConfig>, values: Rec
   }
 }
 
-function bindAllParams(request: ReturnType<ConnectionPool['request']>, params: Record<string, ParamConfig>, values: Record<string, unknown>): void {
-  for (const [name, config] of Object.entries(params)) {
-    const value = values[name];
-    request.input(name, getSqlType(config.type), value ?? null);
-  }
-}
-
 function printStartupInfo(
   spec: ApiSpec,
   config: MythikServerConfig,
@@ -745,7 +694,18 @@ function printStartupInfo(
   specServingEnabled: boolean,
 ): void {
   console.log('\nMythik Server v0.2.0');
-  console.log(`Connected to SQL Server — ${config.database.database}`);
+  const dialect = resolveDatabaseDialect(config.database, spec.dialect);
+  const databaseName =
+    'database' in config.database && config.database.database
+      ? config.database.database
+      : 'filename' in config.database && config.database.filename
+        ? config.database.filename
+        : 'connectionString' in config.database && config.database.connectionString
+          ? config.database.connectionString
+          : 'uri' in config.database && config.database.uri
+            ? config.database.uri
+            : '(configured)';
+  console.log(`Connected to ${dialect} - ${databaseName}`);
 
   if (spec.auth) {
     console.log(`\nAuth: JWT${spec.auth.provider ? ' + built-in login' : ' (external)'}`);

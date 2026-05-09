@@ -1,4 +1,4 @@
-import sql, { type ISqlTypeFactoryWithNoParams } from 'mssql';
+import type { SqlDriver } from 'mythik/server';
 import type { ParamConfig } from './types.js';
 import { SCOPE_ALIAS } from './auth/scope-filter.js';
 import { assertValidIdentifier } from './validation/identifier-guard.js';
@@ -30,23 +30,19 @@ export function parseParamValue(
   }
 }
 
-export function getSqlType(type: ParamConfig['type']): ISqlTypeFactoryWithNoParams {
-  switch (type) {
-    case 'int': return sql.Int;
-    case 'float': return sql.Float;
-    case 'boolean': return sql.Bit;
-    case 'date': return sql.NVarChar;
-    case 'string':
-    default: return sql.NVarChar;
-  }
+export interface PaginationQueryOptions {
+  driver: SqlDriver;
+  limit: number;
+  offset: number;
 }
 
-export function buildPaginatedQuery(query: string): string {
-  return `${query}\nOFFSET @_offset ROWS FETCH NEXT @_pageSize ROWS ONLY`;
+export function buildPaginatedQuery(query: string, options: PaginationQueryOptions): string {
+  return options.driver.paginate(query, options.limit, options.offset);
 }
 
 export interface CountQueryOptions {
   scopeClause?: { sql: string } | null;
+  driver?: SqlDriver;
 }
 
 export interface EndpointCountQueryOptions extends CountQueryOptions {
@@ -103,17 +99,29 @@ export function buildEndpointCountQuery(
     return renderCountScopeMacros(options.customCount, options.scopeClause);
   }
 
+  if (options.driver && !options.scopeClause) {
+    return options.driver.countQuery(query);
+  }
+
   return buildCountQuery(query, options);
 }
 
-export function buildTotalsQuery(query: string, totals: string[]): string | null {
+export interface TotalsQueryOptions {
+  driver?: SqlDriver;
+}
+
+function quoteAlias(alias: string, driver: SqlDriver | undefined): string {
+  return driver ? driver.quoteIdent(alias) : `[${alias.replace(/]/g, ']]')}]`;
+}
+
+export function buildTotalsQuery(query: string, totals: string[], options: TotalsQueryOptions = {}): string | null {
   if (!totals || totals.length === 0) return null;
 
   const aggregations = totals.map(t => {
-    if (t === 'COUNT:*') return 'COUNT(*) as [COUNT:*]';
+    if (t === 'COUNT:*') return `COUNT(*) as ${quoteAlias('COUNT:*', options.driver)}`;
     const [fn, field] = t.split(':');
-    if (fn === 'COUNT_DISTINCT') return `COUNT(DISTINCT ${field}) as [COUNT_DISTINCT:${field}]`;
-    return `${fn}(${field}) as [${fn}:${field}]`;
+    if (fn === 'COUNT_DISTINCT') return `COUNT(DISTINCT ${field}) as ${quoteAlias(`COUNT_DISTINCT:${field}`, options.driver)}`;
+    return `${fn}(${field}) as ${quoteAlias(`${fn}:${field}`, options.driver)}`;
   });
 
   const selectClause = aggregations.join(', ');

@@ -425,6 +425,29 @@ describe('Security: Transaction Validation', () => {
     expect(result.errors[0].message).toContain('confirm');
   });
 
+  it('rejects transaction inside an action array without confirm', () => {
+    const result = validateSpec({
+      root: 'btn',
+      elements: {
+        btn: {
+          type: 'button',
+          on: {
+            press: [
+              { action: 'setState', params: { statePath: '/started', value: true } },
+              {
+                transaction: {
+                  optimistic: [{ action: 'setState', params: { statePath: '/x', value: 1 } }],
+                },
+              },
+            ],
+          },
+        },
+      },
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors[0].message).toContain('confirm');
+  });
+
   it('rejects nested transaction', () => {
     const result = validateSpec({
       root: 'btn',
@@ -463,6 +486,29 @@ describe('Security: Transaction Validation', () => {
                 timeout: -1,
               },
             },
+          },
+        },
+      },
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors[0].message).toContain('timeout');
+  });
+
+  it('rejects invalid timeout on transaction inside an action array', () => {
+    const result = validateSpec({
+      root: 'btn',
+      elements: {
+        btn: {
+          type: 'button',
+          on: {
+            press: [
+              {
+                transaction: {
+                  confirm: [{ action: 'fetch', params: { url: 'https://api.test/x' } }],
+                  timeout: 0,
+                },
+              },
+            ],
           },
         },
       },
@@ -801,6 +847,29 @@ describe('Deep Validation with Context', () => {
                   confirm: [{ action: 'fetch', params: { method: 'POST' } }],
                 },
               },
+            },
+          },
+        },
+      }, createContext());
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.message.includes('url'))).toBe(true);
+    });
+
+    it('validates actions inside transaction phases when the transaction is in an action array', () => {
+      const result = validateSpec({
+        root: 'btn',
+        elements: {
+          btn: {
+            type: 'button',
+            on: {
+              press: [
+                { action: 'setState', params: { statePath: '/started', value: true } },
+                {
+                  transaction: {
+                    confirm: [{ action: 'fetch', params: { method: 'POST' } }],
+                  },
+                },
+              ],
             },
           },
         },

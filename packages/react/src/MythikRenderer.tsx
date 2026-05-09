@@ -363,7 +363,7 @@ function renderNode(
 
   // Wire on.press, on.change, etc. to action dispatcher
   if (_eventBindings && typeof _eventBindings === 'object') {
-    const eventBindings = _eventBindings as Record<string, ActionBinding | ActionBinding[]>;
+    const eventBindings = _eventBindings as Record<string, EventBinding>;
     if (eventBindings.press) {
       handlers.onClick = () => dispatchAction(eventBindings.press);
     }
@@ -876,6 +876,11 @@ export function MythikRenderer({ spec, config = {}, instance, autoDeviceContext 
     (async () => {
       for (const b of bindings) {
         try {
+          if (isTransactionBinding(b)) {
+            await txEngine.execute(b.transaction);
+            continue;
+          }
+
           const promise = dispatcher.dispatch(b, (expr) => svc.resolver.resolve(expr));
           if (!b.fireAndForget) {
             await promise;
@@ -883,8 +888,9 @@ export function MythikRenderer({ spec, config = {}, instance, autoDeviceContext 
         } catch (err) {
           // Auth actions log only in development — prevents leaking stack traces in production
           const authActions = ['login', 'logout', 'refreshSession'];
-          if (!authActions.includes(b.action) || process.env.NODE_ENV !== 'production') {
-            console.error(`Action "${b.action}" failed:`, err);
+          const actionName = isTransactionBinding(b) ? 'transaction' : b.action;
+          if (!authActions.includes(actionName) || process.env.NODE_ENV !== 'production') {
+            console.error(`Action "${actionName}" failed:`, err);
           }
         }
       }

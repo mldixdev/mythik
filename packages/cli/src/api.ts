@@ -19,6 +19,9 @@ export type { PatchOptions } from './commands/patch.js';
 export { runDocsCommand, resolveBundledDocsRoot } from './commands/docs.js';
 export type { DocsCommandOptions, DocsCommandResult } from './commands/docs.js';
 
+export { runInitStore } from './commands/init-store.js';
+export type { InitStoreOptions } from './commands/init-store.js';
+
 export type { CommandResult } from './commands/manifest.js';
 
 // Type re-exports from mythik for convenience (consumers avoid dual-import)

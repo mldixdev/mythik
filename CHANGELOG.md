@@ -2,6 +2,38 @@
 
 All notable public changes to Mythik are documented in this file.
 
+## 0.1.3
+
+Compatible release for the `0.1.x` line. This expands the database foundation
+with generic SQL drivers and stores while preserving the existing public package
+contracts.
+
+### Added
+
+- Added a dialect-aware SQL boundary under `mythik/server` with drivers for SQL Server, PostgreSQL, MySQL, and SQLite.
+- Added generic SQL-backed spec stores: `SqlSpecStore`, `SqlVersionedSpecStore`, and `SqlEnvironmentStore`.
+- Added canonical SQL store DDL plus `mythik init-store --dialect <sqlserver|postgres|mysql|sqlite>` for explicit table initialization and `--dry-run` review.
+- Extended the CLI store resolver so `manifest`, `elements`, `patch`, `validate`, versioned stores, and environment stores work against SQL Server, PostgreSQL, MySQL, and SQLite with one edit loop.
+- Added dialect-aware `mythik-server` support for generated CRUD, catalogs, auth provider queries, scope filters, pagination, totals, query endpoints, and spec serving.
+- Added integration and smoke coverage across real SQL-backed workflows, including SQLite, SQL Server, PostgreSQL, and MySQL validation paths.
+
+### Changed
+
+- Moved SQL Server runtime access onto the same SQL driver boundary used by the new dialects while keeping SQL Server compatibility stores available from `mythik/server`.
+- Kept the browser-safe `mythik` entry free of Node-only SQL imports; SQL drivers and stores remain behind `mythik/server`.
+- Declared SQL adapters (`mssql`, `pg`, `mysql2`, and `better-sqlite3`) as optional dependencies of `mythik`. npm and pnpm install them by default unless optional dependencies are omitted.
+- Generated MySQL upsert SQL now targets MySQL 8.0.19+.
+
+### Fixed
+
+- Hardened MySQL insert/update responses for non-`RETURNING` behavior by selecting inserted or updated records back through the primary key path.
+- Hardened SQL generation and execution edge cases: table overrides, safe scope-filter composition, deterministic pagination fallback, SQL Server aggregate `ORDER BY` stripping, SQL store initialization, timestamp binding, transaction behavior, and shared-driver cleanup in CLI stores.
+- Hardened expression and action contracts: dotted `$let` references for `$ref` and `$template`, `params.skipIf` dispatch-time guards, and event arrays containing both actions and transactions.
+
+### Documentation
+
+- Refreshed `docs/consumer`, bundled docs, package READMEs, and the compiled LLM wiki with the new multi-database, SQL-store, CLI, event-binding, and expression contracts.
+
 ## 0.1.2
 
 Patch release focused on published-package hardening.

@@ -59,6 +59,13 @@ export function resolveParams(params: Record<string, unknown> | undefined, resol
   return resolved;
 }
 
+function shouldSkipAction(params: Record<string, unknown> | undefined, resolve: ResolveFn): boolean {
+  if (!params || !Object.prototype.hasOwnProperty.call(params, 'skipIf')) {
+    return false;
+  }
+  return Boolean(deepResolve(params.skipIf, resolve));
+}
+
 export function createActionDispatcher(config: ActionDispatcherConfig): ActionDispatcherInstance {
   const { store } = config;
   const customActions = config.customActions ?? new Map<string, ActionDefinition>();
@@ -379,7 +386,11 @@ export function createActionDispatcher(config: ActionDispatcherConfig): ActionDi
 
   async function dispatch(binding: ActionBinding, resolve: ResolveFn): Promise<void> {
     const { action, params } = binding;
+    if (shouldSkipAction(params, resolve)) {
+      return;
+    }
     const resolvedParams = resolveParams(params, resolve);
+    delete resolvedParams.skipIf;
 
     // Build middleware context
     const mwContext = {

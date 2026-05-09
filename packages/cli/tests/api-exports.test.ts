@@ -14,6 +14,10 @@ describe('mythik-cli/api surface', () => {
     expect(typeof api.parsePatchInput).toBe('function');
   });
 
+  it('exports runInitStore function', () => {
+    expect(typeof api.runInitStore).toBe('function');
+  });
+
   it('parsePatchInput parses valid input', () => {
     const result = api.parsePatchInput('[{"op":"replace","path":"/x","value":1}]');
     expect(result).toHaveLength(1);

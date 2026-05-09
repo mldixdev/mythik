@@ -23,15 +23,20 @@ sources: [docs/consumer/ai-context-runtime-semantics.md#54-specstore-layering--s
 | Store | Purpose |
 |---|---|
 | `FileSpecStore` | Local filesystem (`fs`) |
-| `SqlServerSpecStore` | SQL Server (via `mssql`) |
-| `SqlServerVersionedSpecStore` | + version history |
-| `SqlServerEnvironmentStore` | + env promotions |
+| `SqlSpecStore` | Generic SQL store over a `SqlDriver` |
+| `SqlVersionedSpecStore` | Generic SQL store + version history |
+| `SqlEnvironmentStore` | Generic SQL store + env promotions |
+| `SqlServerSpecStore` | SQL Server compatibility wrapper |
+| `SqlServerVersionedSpecStore` | SQL Server compatibility wrapper + version history |
+| `SqlServerEnvironmentStore` | SQL Server compatibility wrapper + env promotions |
+
+Supported SQL driver dialects: SQL Server, PostgreSQL, MySQL, and SQLite.
 
 ## Why split
 
-Pre-v0.1.0 shape pulled `mssql` (Node-only) and `fs` into any browser
-bundle that imported `mythik`. v0.1.0 structural split makes
-`mythik` browser-safe **by construction** — no bundler stubs
+The structural split keeps `mythik` browser-safe **by construction**:
+browser bundles import the default entry, while Node hosts import
+`mythik/server` for filesystem stores, SQL stores, and SQL adapters.
 
 ## Imports
 
@@ -40,7 +45,14 @@ bundle that imported `mythik`. v0.1.0 structural split makes
 import { SupabaseSpecStore, MemorySpecStore } from 'mythik';
 
 // Node-only
-import { SqlServerSpecStore, FileSpecStore } from 'mythik/server';
+import { FileSpecStore, SqlSpecStore, createSqlDriver } from 'mythik/server';
+
+const driver = createSqlDriver({
+  dialect: 'postgres',
+  connection: process.env.DATABASE_URL!,
+});
+
+const store = new SqlSpecStore({ driver });
 ```
 
 ## Configurable table names
@@ -49,7 +61,7 @@ Default `'screens'`. Override via constructor — see
 [[@concept-storage-custom-names]].
 
 ```ts
-new SqlServerSpecStore({ ..., table: 'api_specs' })
+new SqlSpecStore({ driver, table: 'api_specs' })
 new SupabaseSpecStore({ ..., table: 'api_specs' })
 ```
 

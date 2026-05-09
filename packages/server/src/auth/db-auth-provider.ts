@@ -1,8 +1,9 @@
-import type { ConnectionPool } from 'mssql';
+import type { SqlDriver } from 'mythik/server';
 import type { ProviderConfig, JwtConfig, LoginResponse, LoginResponseUser } from './types.js';
 import { createJwtStrategy } from './jwt-strategy.js';
 import { getPasswordVerifier } from './password-verifier.js';
 import { createRefreshStore, type RefreshStore } from './refresh-store.js';
+import { assertValidIdentifier } from '../validation/identifier-guard.js';
 
 export interface DbAuthProvider {
   login(username: string, password: string): Promise<LoginResponse>;
@@ -23,7 +24,7 @@ function getField(row: Record<string, unknown>, fieldName: string): unknown {
 export function createDbAuthProvider(
   config: ProviderConfig,
   jwtConfig: JwtConfig,
-  pool: ConnectionPool,
+  db: SqlDriver,
 ): DbAuthProvider {
   const jwtStrategy = createJwtStrategy(jwtConfig);
   const passwordVerifier = getPasswordVerifier(config.passwordHash);
@@ -32,32 +33,28 @@ export function createDbAuthProvider(
   const claimsMapping = jwtConfig.claims ?? {};
 
   async function queryList(sql: string, username: string): Promise<unknown[]> {
-    const req = pool.request();
-    req.input('username', username);
-    const result = await req.query(sql);
-    return result.recordset.map((r: Record<string, unknown>) => {
+    const rows = await db.query(sql, { username });
+    return rows.map((r: Record<string, unknown>) => {
       const keys = Object.keys(r);
       return r.val ?? r[keys[0]];
     });
   }
 
   async function queryScalar(sql: string, username: string): Promise<unknown> {
-    const req = pool.request();
-    req.input('username', username);
-    const result = await req.query(sql);
-    if (!result.recordset[0]) return null;
-    const row = result.recordset[0] as Record<string, unknown>;
+    const rows = await db.query(sql, { username });
+    if (!rows[0]) return null;
+    const row = rows[0] as Record<string, unknown>;
     const keys = Object.keys(row);
     return row.val ?? row[keys[0]] ?? null;
   }
 
   async function lookupUser(username: string): Promise<Record<string, unknown> | null> {
-    const req = pool.request();
-    req.input('username', username);
+    assertValidIdentifier(config.usersTable, 'auth.provider.usersTable');
+    assertValidIdentifier(config.usernameColumn, 'auth.provider.usernameColumn');
     const condition = config.activeCondition ? ` AND ${config.activeCondition}` : '';
-    const sql = `SELECT * FROM ${config.usersTable} WHERE ${config.usernameColumn} = @username${condition}`;
-    const result = await req.query(sql);
-    return result.recordset[0] ?? null;
+    const sql = `SELECT * FROM ${quoteIdentifierPath(db, config.usersTable)} WHERE ${quoteIdentifierPath(db, config.usernameColumn)} = @username${condition}`;
+    const rows = await db.query(sql, { username });
+    return rows[0] ?? null;
   }
 
   async function buildUserInfo(username: string, userRow: Record<string, unknown>): Promise<LoginResponseUser> {
@@ -153,4 +150,10 @@ export function createDbAuthProvider(
   }
 
   return { login, refresh, getRefreshStore };
+}
+
+function quoteIdentifierPath(driver: SqlDriver, identifier: string): string {
+  return identifier.includes('.')
+    ? driver.quoteQualified(...identifier.split('.'))
+    : driver.quoteIdent(identifier);
 }

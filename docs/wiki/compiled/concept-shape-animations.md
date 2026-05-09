@@ -30,7 +30,7 @@ useShapeAnimations(ref, animations, options)
 ## RN variant
 
 `packages/react-native/src/animation/useShapeAnimations.ts` — repository
-preview implementation. It is not part of the initial npm publish surface.
+preview implementation. It is not part of the supported npm publish surface yet.
 
 ```ts
 useShapeAnimations(animations, options) → { animatedProps }

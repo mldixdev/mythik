@@ -1,7 +1,8 @@
 import type { CatalogConfig } from './types.js';
 import { assertValidIdentifier } from './validation/identifier-guard.js';
+import type { SqlDriver } from 'mythik/server';
 
-export function buildCatalogQuery(config: CatalogConfig): string | null {
+export function buildCatalogQuery(driver: SqlDriver, config: CatalogConfig): string | null {
   if (config.static) return null;
 
   if (!config.from) return null;
@@ -11,33 +12,44 @@ export function buildCatalogQuery(config: CatalogConfig): string | null {
   if (config.distinct) {
     assertValidIdentifier(config.distinct, 'catalog.distinct');
     const orderByClause = config.orderBy
-      ? `ORDER BY ${bracketOrderBy(config.orderBy)}`
-      : `ORDER BY [${config.distinct}] ASC`;
-    return `SELECT DISTINCT [${config.distinct}] AS [value], [${config.distinct}] AS [label] FROM [${config.from}] ${orderByClause}`;
+      ? `ORDER BY ${quoteOrderBy(driver, config.orderBy)}`
+      : `ORDER BY ${quoteIdentifierPath(driver, config.distinct)} ASC`;
+    return `SELECT DISTINCT ${quoteIdentifierPath(driver, config.distinct)} AS ${driver.quoteIdent('value')}, ${quoteIdentifierPath(driver, config.distinct)} AS ${driver.quoteIdent('label')} FROM ${quoteIdentifierPath(driver, config.from)} ${orderByClause}`;
   }
 
   assertValidIdentifier(config.value!, 'catalog.value');
   assertValidIdentifier(config.label!, 'catalog.label');
 
-  const selectParts = [`[${config.value}] AS [value]`, `[${config.label}] AS [label]`];
+  const selectParts = [
+    `${quoteIdentifierPath(driver, config.value!)} AS ${driver.quoteIdent('value')}`,
+    `${quoteIdentifierPath(driver, config.label!)} AS ${driver.quoteIdent('label')}`,
+  ];
 
   if (config.extra) {
     for (const field of config.extra) {
       assertValidIdentifier(field, 'catalog.extra');
-      selectParts.push(`[${field}]`);
+      selectParts.push(quoteIdentifierPath(driver, field));
     }
   }
 
   const whereClause = config.where ? ` WHERE ${config.where}` : '';
   const orderByClause = config.orderBy
-    ? `ORDER BY ${bracketOrderBy(config.orderBy)}`
-    : `ORDER BY [${config.label}] ASC`;
+    ? `ORDER BY ${quoteOrderBy(driver, config.orderBy)}`
+    : `ORDER BY ${quoteIdentifierPath(driver, config.label!)} ASC`;
 
-  return `SELECT ${selectParts.join(', ')} FROM [${config.from}]${whereClause} ${orderByClause}`;
+  return `SELECT ${selectParts.join(', ')} FROM ${quoteIdentifierPath(driver, config.from)}${whereClause} ${orderByClause}`;
 }
 
-function bracketOrderBy(orderBy: string): string {
-  return orderBy.replace(/^(\w+)(\s+(?:ASC|DESC))?$/i, (_match, col: string, dir: string | undefined) => {
-    return `[${col}]${dir ?? ''}`;
-  });
+function quoteIdentifierPath(driver: SqlDriver, identifier: string): string {
+  return identifier.includes('.')
+    ? driver.quoteQualified(...identifier.split('.'))
+    : driver.quoteIdent(identifier);
+}
+
+function quoteOrderBy(driver: SqlDriver, orderBy: string): string {
+  const match = /^([a-zA-Z_][a-zA-Z0-9_.]*)(\s+(?:ASC|DESC))?$/i.exec(orderBy.trim());
+  if (!match) return orderBy;
+  const [, column, direction] = match;
+  assertValidIdentifier(column!, 'catalog.orderBy');
+  return `${quoteIdentifierPath(driver, column!)}${direction ?? ''}`;
 }

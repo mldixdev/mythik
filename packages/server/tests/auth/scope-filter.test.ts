@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { createSqlDriver } from 'mythik/server';
 import { buildScopeWhereClause, validateScopeForInsert, resolveActiveScope, wrapQueryWithScopeFilter } from '../../src/auth/scope-filter.js';
 import type { ScopeFilterConfig } from '../../src/auth/types.js';
 
@@ -43,6 +44,21 @@ describe('buildScopeWhereClause — mode "all"', () => {
     const result = buildScopeWhereClause(allConfig, [1], undefined, ['EDITOR'], 'inst_id');
     expect(result!.sql).toContain('_scoped.inst_id IN');
   });
+
+  it('quotes generated scope columns through the selected driver', () => {
+    const sqlite = createSqlDriver({ dialect: 'sqlite', connection: { filename: ':memory:' } });
+    const result = buildScopeWhereClause(allConfig, [1], undefined, ['EDITOR'], { driver: sqlite });
+    expect(result!.sql).toBe('_scoped."organizationId" IN (@_scope0)');
+  });
+
+  it('can generate direct-table scope clauses without the wrapped-query alias', () => {
+    const sqlite = createSqlDriver({ dialect: 'sqlite', connection: { filename: ':memory:' } });
+    const result = buildScopeWhereClause(allConfig, [1], undefined, ['EDITOR'], {
+      driver: sqlite,
+      qualifier: null,
+    });
+    expect(result!.sql).toBe('"organizationId" IN (@_scope0)');
+  });
 });
 
 describe('buildScopeWhereClause — mode "select"', () => {
@@ -50,6 +66,12 @@ describe('buildScopeWhereClause — mode "select"', () => {
     const result = buildScopeWhereClause(selectConfig, [3, 5, 12], 5, ['user']);
     expect(result!.sql).toContain('_scoped.clinicId = @_activeScope');
     expect(result!.params).toEqual({ _activeScope: 5 });
+  });
+
+  it('quotes select-mode scope columns through the selected driver', () => {
+    const sqlserver = createSqlDriver({ dialect: 'sqlserver', connection: { server: 'localhost', database: 'Mythik' } });
+    const result = buildScopeWhereClause(selectConfig, [3, 5, 12], 5, ['user'], { driver: sqlserver });
+    expect(result!.sql).toBe('_scoped.[clinicId] = @_activeScope');
   });
 
   it('returns null for bypass roles', () => {

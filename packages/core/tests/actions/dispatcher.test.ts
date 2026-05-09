@@ -35,6 +35,83 @@ describe('ActionDispatcher', () => {
     });
   });
 
+  describe('skipIf', () => {
+    it('skips an action when skipIf resolves truthy', async () => {
+      const store = createStateStore({ shouldSkip: true });
+      const resolver = createResolver({ store });
+      let fetchCalled = false;
+      const dispatcher = createActionDispatcher({
+        store,
+        fetcher: async () => {
+          fetchCalled = true;
+          return { ok: true, status: 200, json: async () => ({ ok: true }) } as Response;
+        },
+      });
+      const resolve = (expr: unknown) => resolver.resolve(expr);
+
+      await dispatcher.dispatch({
+        action: 'fetch',
+        params: {
+          skipIf: { $state: '/shouldSkip' },
+          url: 'https://example.com/create-only-data',
+          target: '/result',
+        },
+      }, resolve);
+
+      expect(fetchCalled).toBe(false);
+      expect(store.get('/result')).toBeUndefined();
+      expect(store.get('/ui/loading')).toBeUndefined();
+    });
+
+    it('runs an action when skipIf resolves falsey', async () => {
+      const store = createStateStore({ shouldSkip: false });
+      const resolver = createResolver({ store });
+      let fetchCalled = false;
+      const dispatcher = createActionDispatcher({
+        store,
+        fetcher: async () => {
+          fetchCalled = true;
+          return { ok: true, status: 200, json: async () => ({ loaded: true }) } as Response;
+        },
+      });
+      const resolve = (expr: unknown) => resolver.resolve(expr);
+
+      await dispatcher.dispatch({
+        action: 'fetch',
+        params: {
+          skipIf: { $state: '/shouldSkip' },
+          url: 'https://example.com/create-only-data',
+          target: '/result',
+        },
+      }, resolve);
+
+      expect(fetchCalled).toBe(true);
+      expect(store.get('/result')).toEqual({ loaded: true });
+      expect(store.get('/ui/loading')).toBe(false);
+    });
+
+    it('does not pass skipIf through to executed action handlers', async () => {
+      const { dispatcher, resolve } = setup({ shouldSkip: false });
+      let receivedParams: Record<string, unknown> | undefined;
+      dispatcher.registerAction({
+        name: 'captureParams',
+        handler: (params) => {
+          receivedParams = params;
+        },
+      });
+
+      await dispatcher.dispatch({
+        action: 'captureParams',
+        params: {
+          skipIf: { $state: '/shouldSkip' },
+          value: 'kept',
+        },
+      }, resolve);
+
+      expect(receivedParams).toEqual({ value: 'kept' });
+    });
+  });
+
   describe('navigate', () => {
     it('sets navigation intent in state', async () => {
       const { store, dispatcher, resolve } = setup();

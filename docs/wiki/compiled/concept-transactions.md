@@ -12,6 +12,10 @@ framework takes a state snapshot before `optimistic`, applies your changes
 instantly, then confirms with the server. **On failure, it rolls back
 automatically.**
 
+A transaction can be used directly as an event binding or as one entry inside
+an event action array. When mixed with normal actions in an event array,
+Mythik awaits the transaction before running the next entry.
+
 ## Shape / Signature
 
 ```json
@@ -58,6 +62,9 @@ Default 10 seconds. Override:
 - **`submitForm` in `confirm` is NOT recommended.** It has its own validation
   gate that conflicts with the transaction engine. Use `fetch` in `confirm`
   instead. See [[@antipattern-submit-form-in-tx-confirm]].
+- **Do not nest transactions.** An event array may contain transaction
+  bindings, but `before`, `optimistic`, `confirm`, `onSuccess`, and `onError`
+  phases contain normal action bindings only.
 - **UPDATE transactions don't need `onSuccess`** — re-fetch causes flash.
   See [[@pattern-tx-update]].
 
@@ -66,6 +73,7 @@ Default 10 seconds. Override:
 - [[@concept-transaction-phase-timing]]
 - [[@concept-transaction-rollback]]
 - [[@concept-transaction-snapshot]]
+- [[@concept-action-chains]]
 - [[@pattern-tx-create]] / [[@pattern-tx-update]] / [[@pattern-tx-delete]] / [[@pattern-tx-toggle]]
 - [[@path-tx-result-error]]
 

@@ -1,10 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockQuery, mockInput, mockConnect, mockClose } = vi.hoisted(() => ({
+const { mockQuery, mockInput, mockConnect, mockClose, mockBegin, mockCommit, mockRollback } = vi.hoisted(() => ({
   mockQuery: vi.fn(),
   mockInput: vi.fn().mockReturnThis(),
   mockConnect: vi.fn(),
   mockClose: vi.fn(),
+  mockBegin: vi.fn(),
+  mockCommit: vi.fn(),
+  mockRollback: vi.fn(),
 }));
 
 vi.mock('mssql', () => {
@@ -20,6 +23,12 @@ vi.mock('mssql', () => {
     default: {
       ConnectionPool: vi.fn().mockImplementation(() => ({
         connect: () => mockConnect(),
+      })),
+      Transaction: vi.fn().mockImplementation(() => ({
+        begin: () => mockBegin(),
+        commit: () => mockCommit(),
+        rollback: () => mockRollback(),
+        request: () => ({ input: mockInput, query: mockQuery }),
       })),
       NVarChar: NVarCharFn,
       MAX: 'MAX',
@@ -40,6 +49,9 @@ describe('SqlServerSpecStore', () => {
   beforeEach(() => {
     mockQuery.mockReset();
     mockInput.mockReset().mockReturnThis();
+    mockBegin.mockReset().mockResolvedValue(undefined);
+    mockCommit.mockReset().mockResolvedValue(undefined);
+    mockRollback.mockReset().mockResolvedValue(undefined);
   });
 
   it('load returns parsed spec from recordset', async () => {
@@ -69,17 +81,20 @@ describe('SqlServerSpecStore', () => {
     expect(result).toEqual(spec);
   });
 
-  it('save calls MERGE upsert', async () => {
-    mockQuery.mockResolvedValue({});
+  it('save delegates through the generic SqlSpecStore flow', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ recordset: [] })
+      .mockResolvedValueOnce({ recordset: [{ id: 'my-screen' }], rowsAffected: [1] });
 
     const store = new SqlServerSpecStore(config);
     await store.save('my-screen', { root: 'r', elements: { r: { type: 'box', props: {} } } });
 
-    expect(mockQuery).toHaveBeenCalled();
-    const sql = mockQuery.mock.calls[0][0] as string;
-    expect(sql).toContain('MERGE [screens]');
-    expect(sql).toContain('WHEN MATCHED');
-    expect(sql).toContain('WHEN NOT MATCHED');
+    expect(mockQuery).toHaveBeenCalledTimes(2);
+    expect(mockQuery.mock.calls[0][0]).toContain('SELECT version FROM [screens]');
+    expect(mockQuery.mock.calls[1][0]).toContain('INSERT INTO [screens]');
+    expect(mockQuery.mock.calls[1][0]).toContain('OUTPUT INSERTED.[id]');
+    expect(mockBegin).toHaveBeenCalledTimes(1);
+    expect(mockCommit).toHaveBeenCalledTimes(1);
   });
 
   it('list returns array of screen ids', async () => {

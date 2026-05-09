@@ -1,4 +1,5 @@
 import type { ExpressionHandlerDefinition, ResolverContext } from '../../types.js';
+import { resolveLetBindingPath } from './let.js';
 
 // Matches both ${/state/path} and ${localBinding}
 const INTERPOLATION_REGEX = /\$\{([^}]+)\}/g;
@@ -16,7 +17,7 @@ export const templateHandler: ExpressionHandlerDefinition = {
         value = context.getState(ref);
       } else {
         // $let binding: ${age}
-        value = context.letBindings?.[ref];
+        value = resolveLetBindingPath(context.letBindings, ref).value;
       }
 
       if (value === null || value === undefined) return '';

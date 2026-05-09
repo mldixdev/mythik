@@ -13,6 +13,57 @@ export interface SuggestedFix {
   description: string;
 }
 
+function validateTransactionBinding(
+  binding: unknown,
+  elementId: string,
+  eventPath: string,
+  errors: ValidationError[],
+  spec?: Spec,
+): boolean {
+  if (!binding || typeof binding !== 'object' || Array.isArray(binding)) return false;
+  if (!('transaction' in (binding as Record<string, unknown>))) return false;
+
+  const tx = (binding as Record<string, unknown>).transaction;
+  const transactionPath = `${eventPath}.transaction`;
+  const pathPrefix = `/elements/${elementId}/${eventPath.replace(/\./g, '/')}/transaction`;
+
+  if (!tx || typeof tx !== 'object' || Array.isArray(tx)) {
+    errors.push({ message: `Element "${elementId}": ${transactionPath} must be an object`, elementId, path: pathPrefix });
+    return true;
+  }
+
+  const txObj = tx as Record<string, unknown>;
+
+  if (!txObj.confirm || !Array.isArray(txObj.confirm) || (txObj.confirm as unknown[]).length === 0) {
+    errors.push({ message: `Element "${elementId}": ${transactionPath}.confirm is required and must be a non-empty array`, elementId, path: `${pathPrefix}/confirm` });
+  }
+
+  for (const phase of ['before', 'optimistic', 'onSuccess', 'onError']) {
+    if (txObj[phase] !== undefined && !Array.isArray(txObj[phase])) {
+      errors.push({ message: `Element "${elementId}": ${transactionPath}.${phase} must be an array`, elementId, path: `${pathPrefix}/${phase}` });
+    }
+  }
+
+  if (txObj.timeout !== undefined) {
+    if (typeof txObj.timeout !== 'number' || txObj.timeout <= 0) {
+      errors.push({ message: `Element "${elementId}": ${transactionPath}.timeout must be a positive number`, elementId, path: `${pathPrefix}/timeout` });
+    }
+  }
+
+  for (const phase of ['before', 'optimistic', 'confirm', 'onSuccess', 'onError']) {
+    if (!Array.isArray(txObj[phase])) continue;
+
+    for (const action of txObj[phase] as unknown[]) {
+      if (action && typeof action === 'object' && 'transaction' in (action as Record<string, unknown>)) {
+        errors.push({ message: `Element "${elementId}": ${transactionPath}.${phase} cannot contain nested transactions`, elementId, path: `${pathPrefix}/${phase}` });
+      }
+      validateActionBinding(action, elementId, `${transactionPath}.${phase}`, errors, spec);
+    }
+  }
+
+  return true;
+}
+
 /**
  * Validation error/warning structure used by all validators in `mythik`.
  *
@@ -617,43 +668,13 @@ export function validateSpec(spec: unknown, context: ValidationContext = {}): Sp
 
     if (el.on && typeof el.on === 'object' && !Array.isArray(el.on)) {
       for (const [eventName, binding] of Object.entries(el.on as Record<string, unknown>)) {
-        if (binding && typeof binding === 'object' && !Array.isArray(binding) && 'transaction' in (binding as Record<string, unknown>)) {
-          const tx = (binding as Record<string, unknown>).transaction;
-          if (!tx || typeof tx !== 'object' || Array.isArray(tx)) {
-            errors.push({ message: `Element "${id}": on.${eventName}.transaction must be an object`, elementId: id, path: `/elements/${id}/on/${eventName}/transaction` });
-            continue;
-          }
-          const txObj = tx as Record<string, unknown>;
-
-          if (!txObj.confirm || !Array.isArray(txObj.confirm) || (txObj.confirm as unknown[]).length === 0) {
-            errors.push({ message: `Element "${id}": on.${eventName}.transaction.confirm is required and must be a non-empty array`, elementId: id, path: `/elements/${id}/on/${eventName}/transaction/confirm` });
-          }
-
-          for (const phase of ['before', 'optimistic', 'onSuccess', 'onError']) {
-            if (txObj[phase] !== undefined && !Array.isArray(txObj[phase])) {
-              errors.push({ message: `Element "${id}": on.${eventName}.transaction.${phase} must be an array`, elementId: id, path: `/elements/${id}/on/${eventName}/transaction/${phase}` });
-            }
-          }
-
-          if (txObj.timeout !== undefined) {
-            if (typeof txObj.timeout !== 'number' || txObj.timeout <= 0) {
-              errors.push({ message: `Element "${id}": on.${eventName}.transaction.timeout must be a positive number`, elementId: id, path: `/elements/${id}/on/${eventName}/transaction/timeout` });
-            }
-          }
-
-          for (const phase of ['before', 'optimistic', 'confirm', 'onSuccess', 'onError']) {
-            if (Array.isArray(txObj[phase])) {
-              for (const action of txObj[phase] as unknown[]) {
-                if (action && typeof action === 'object' && 'transaction' in (action as Record<string, unknown>)) {
-                  errors.push({ message: `Element "${id}": on.${eventName}.transaction.${phase} cannot contain nested transactions`, elementId: id, path: `/elements/${id}/on/${eventName}/transaction/${phase}` });
-                }
-                validateActionBinding(action, id, `on.${eventName}.transaction.${phase}`, errors, s as unknown as Spec);
-              }
-            }
-          }
+        if (validateTransactionBinding(binding, id, `on.${eventName}`, errors, s as unknown as Spec)) {
+          continue;
         } else if (Array.isArray(binding)) {
           for (const action of binding) {
-            validateActionBinding(action, id, `on.${eventName}`, errors, s as unknown as Spec);
+            if (!validateTransactionBinding(action, id, `on.${eventName}`, errors, s as unknown as Spec)) {
+              validateActionBinding(action, id, `on.${eventName}`, errors, s as unknown as Spec);
+            }
           }
         } else if (binding && typeof binding === 'object') {
           validateActionBinding(binding, id, `on.${eventName}`, errors, s as unknown as Spec);

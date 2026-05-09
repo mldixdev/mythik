@@ -12,6 +12,9 @@ References use `$ref`. Use to define a value once and reference it multiple
 times — particularly useful when `$item` or a complex expression must be
 captured for use in `$template`.
 
+`$ref` can read nested values from an object binding with dot notation. The
+same dotted binding lookup is available inside `$template` placeholders.
+
 ## Shape / Signature
 
 Object form (no inter-binding refs):
@@ -40,6 +43,17 @@ Capture `$item` for `$template` (the most common use):
 {
   "$let": { "x": { "$item": "name" } },
   "$in": { "$template": "Editing: ${x}" }
+}
+```
+
+Read nested object fields:
+```json
+{
+  "$let": { "user": { "$state": "/auth/user" } },
+  "$in": {
+    "label": { "$ref": "user.name" },
+    "message": { "$template": "Welcome, ${user.name}" }
+  }
 }
 ```
 
@@ -73,6 +87,10 @@ In a composite template:
 - **Use array form when storing in JSONB.** Object key order is not
   preserved by JSONB — if bindings reference each other via `$ref`, use
   the array form to guarantee evaluation order. See rule 4.
+- **Fix missing dotted `$ref` segments.** A path such as
+  `{ "$ref": "user.name" }` expects `user` to exist as a binding and `name`
+  to exist on that object. Missing dotted segments are invalid references,
+  not optional data.
 - Object form is fine when bindings don't reference each other.
 
 ## Related concepts

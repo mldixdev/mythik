@@ -111,6 +111,36 @@ All three run the same validators that `patch` and `promote` enforce
 atomically — useful when constructing complex multi-step changes
 locally before committing to a push.
 
+## Store backends
+
+The CLI can operate against memory, file, Supabase, SQL Server,
+PostgreSQL, MySQL, and SQLite stores. SQL stores share the same edit
+loop: inspect with `manifest`, read exact nodes with `elements`, write
+with `patch --from-file`, then verify.
+
+```bash
+# SQLite: local development, demos, tests
+npx mythik init-store --dialect sqlite --target ./mythik.db
+npx mythik patch floor-editor --from-file patch.json --store sqlite --filename ./mythik.db --author ai-agent
+
+# PostgreSQL
+npx mythik init-store --dialect postgres --dry-run
+npx mythik patch floor-editor --from-file patch.json --store postgres --url "$DATABASE_URL" --author ai-agent
+
+# MySQL
+npx mythik init-store --dialect mysql --dry-run
+npx mythik patch floor-editor --from-file patch.json --store mysql --url "$DATABASE_URL" --author ai-agent
+
+# SQL Server
+npx mythik init-store --dialect sqlserver --server localhost --database Mythik --user "$DB_USER" --password "$DB_PASSWORD" --encrypt false --trust-server-certificate
+npx mythik patch floor-editor --from-file patch.json --store sqlserver --server localhost --database Mythik --user "$DB_USER" --password "$DB_PASSWORD" --author ai-agent
+```
+
+`init-store --dry-run` prints the idempotent DDL for review or for a
+team-managed migration pipeline. Runtime reads and writes do not
+silently create missing store tables. MySQL generated upsert SQL
+targets MySQL 8.0.19+.
+
 ## History and rollback
 
 ```bash
@@ -190,9 +220,9 @@ modify specs. Inside that directory:
 
 ## Status
 
-`v0.1.2` public release. The binary name is `mythik`; the npm package
-name is `mythik-cli`. APIs are documented for real-world feedback as
-the framework evolves.
+Public release line. The binary name is `mythik`; the npm package name
+is `mythik-cli`. APIs are documented for real-world feedback as the
+framework evolves.
 
 ## License
 

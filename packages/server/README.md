@@ -54,6 +54,11 @@ below for what it actually checks.
   ApiSpec, opens the database connection, registers all declared
   endpoints, and exposes a `start(port)` method.
 
+- **Dialect-aware SQL runtime** — generated CRUD, catalogs,
+  pagination, auth provider queries, and scope filters compile through
+  the selected database driver. Supported dialects are SQL Server,
+  PostgreSQL, MySQL, and SQLite.
+
 - **Endpoint patterns** — your ApiSpec declares each endpoint as one
   of four shapes; the server wires the route, validates inputs,
   enforces auth, and applies RLS automatically:
@@ -82,11 +87,8 @@ import { createServer } from 'mythik-server';
 const server = createServer({
   spec: './api-spec.json',
   database: {
-    server:   process.env.DB_SERVER!,
-    database: process.env.DB_NAME!,
-    user:     process.env.DB_USER!,
-    password: process.env.DB_PASSWORD!,
-    trustServerCertificate: true,
+    type: 'postgres',
+    connectionString: process.env.DATABASE_URL!,
   },
 });
 
@@ -96,6 +98,22 @@ await server.start(3010);
 `./api-spec.json` is a Mythik ApiSpec describing endpoints, auth
 policy, catalogs, and CRUD shape. See `ai-context.md` (bundled in the
 `mythik` package) for the ApiSpec schema and patterns.
+
+For local demos and tests, SQLite is a one-file option:
+
+```ts
+const server = createServer({
+  spec: './api-spec.json',
+  database: { type: 'sqlite', filename: './mythik.db' },
+});
+```
+
+Set `spec.dialect` in the ApiSpec to match the server database when
+Mythik should generate CRUD/catalog/pagination/scope SQL for that
+dialect. Custom SQL remains dialect-native; Mythik compiles named
+params (`@name`) but does not translate a SQL Server query into
+PostgreSQL/MySQL/SQLite SQL at runtime. MySQL generated upsert SQL
+targets MySQL 8.0.19+.
 
 ## ApiSpec philosophy
 
@@ -160,7 +178,7 @@ to detect; in Mythik both `roleAccess` (frontend) and `policies`
 
 ## Status
 
-`v0.1.2` public release. Use with `mythik contract` to cross-check
+Public release line. Use with `mythik contract` to cross-check
 frontend specs against backend endpoints before deployment. APIs are
 documented for real-world feedback as the framework evolves.
 

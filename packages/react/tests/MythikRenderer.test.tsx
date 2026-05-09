@@ -428,6 +428,54 @@ describe('MythikRenderer', () => {
     expect(executionOrder).toEqual(['step1-done', 'step2-done']);
   });
 
+  it('executes action and transaction bindings inside action arrays serially', async () => {
+    const executionOrder: string[] = [];
+    const spec = {
+      root: 'btn',
+      elements: {
+        btn: {
+          type: 'button',
+          props: { label: 'Save' },
+          on: {
+            press: [
+              { action: 'recordBefore', params: {} },
+              { transaction: {
+                confirm: [
+                  { action: 'recordConfirm', params: {} },
+                ],
+                onSuccess: [
+                  { action: 'recordSuccess', params: {} },
+                ],
+              } },
+              { action: 'recordAfter', params: {} },
+            ],
+          },
+        },
+      },
+    } as unknown as Spec;
+
+    const svc = createMythik({});
+    registerReactPrimitives(svc.plugins);
+    for (const name of ['recordBefore', 'recordConfirm', 'recordSuccess', 'recordAfter']) {
+      svc.plugins.registerAction({
+        name,
+        handler: async () => {
+          executionOrder.push(name);
+        },
+      });
+    }
+    svc.applyPlugins();
+
+    render(<MythikRenderer spec={spec} instance={svc} />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await new Promise((r) => setTimeout(r, 50));
+    });
+
+    expect(executionOrder).toEqual(['recordBefore', 'recordConfirm', 'recordSuccess', 'recordAfter']);
+  });
+
   it('does not await fireAndForget actions before continuing', async () => {
     const executionOrder: string[] = [];
 

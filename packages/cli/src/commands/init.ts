@@ -2,12 +2,20 @@ import fs from 'fs';
 import path from 'path';
 import type { CommandResult } from './manifest.js';
 import { formatSuccess, formatError } from '../output.js';
+import { isSqlStoreType } from '../config.js';
 
 export interface InitFlags {
   store?: string;
   url?: string;
   key?: string;
   dir?: string;
+  filename?: string;
+  connection?: string;
+  server?: string;
+  database?: string;
+  user?: string;
+  password?: string;
+  port?: string;
 }
 
 export async function runInit(flags: InitFlags, cwd: string): Promise<CommandResult> {
@@ -105,11 +113,44 @@ function buildConfig(flags: InitFlags): Record<string, unknown> {
       throw new Error('Supabase store requires --url and --key flags');
     }
     config.supabase = { url: flags.url, apiKey: flags.key };
+  } else if (flags.store && isSqlStoreType(flags.store)) {
+    config.sql = buildSqlConfig(flags);
   } else if (flags.store === 'file') {
     config.file = { dir: flags.dir ?? './specs' };
   }
 
   return config;
+}
+
+function buildSqlConfig(flags: InitFlags): Record<string, unknown> {
+  if (!flags.store || !isSqlStoreType(flags.store)) {
+    throw new Error('SQL store requires a supported SQL dialect');
+  }
+
+  if (flags.store === 'sqlite') {
+    return {
+      dialect: 'sqlite',
+      connection: { filename: flags.filename ?? flags.url ?? './mythik.db' },
+    };
+  }
+
+  if (flags.store === 'sqlserver') {
+    return {
+      dialect: 'sqlserver',
+      connection: {
+        server: flags.server ?? flags.url ?? '',
+        database: flags.database ?? '',
+        user: flags.user,
+        password: flags.password,
+        port: flags.port ? Number.parseInt(flags.port, 10) : undefined,
+      },
+    };
+  }
+
+  return {
+    dialect: flags.store,
+    connection: flags.connection ?? flags.url ?? '',
+  };
 }
 
 async function interactiveInit(): Promise<Record<string, unknown>> {
@@ -119,6 +160,10 @@ async function interactiveInit(): Promise<Record<string, unknown>> {
     message: 'Select store type:',
     choices: [
       { value: 'supabase', name: 'Supabase' },
+      { value: 'sqlite', name: 'SQLite' },
+      { value: 'postgres', name: 'PostgreSQL' },
+      { value: 'mysql', name: 'MySQL' },
+      { value: 'sqlserver', name: 'SQL Server' },
       { value: 'file', name: 'File (local JSON)' },
       { value: 'memory', name: 'Memory (testing)' },
     ],
@@ -133,6 +178,26 @@ async function interactiveInit(): Promise<Record<string, unknown>> {
   } else if (store === 'file') {
     const dir = await input({ message: 'Specs directory:', default: './specs' });
     config.file = { dir };
+  } else if (store === 'sqlite') {
+    const filename = await input({ message: 'SQLite database file:', default: './mythik.db' });
+    config.sql = { dialect: 'sqlite', connection: { filename } };
+  } else if (store === 'postgres' || store === 'mysql') {
+    const url = await input({ message: `${store === 'postgres' ? 'PostgreSQL' : 'MySQL'} URL:` });
+    config.sql = { dialect: store, connection: url };
+  } else if (store === 'sqlserver') {
+    const server = await input({ message: 'SQL Server host:' });
+    const database = await input({ message: 'Database name:' });
+    const user = await input({ message: 'User:', default: '' });
+    const passwordValue = await password({ message: 'Password:', mask: '*' });
+    config.sql = {
+      dialect: 'sqlserver',
+      connection: {
+        server,
+        database,
+        user: user || undefined,
+        password: passwordValue || undefined,
+      },
+    };
   }
 
   return config;

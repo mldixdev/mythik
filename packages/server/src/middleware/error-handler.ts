@@ -41,7 +41,7 @@ export function createErrorHandler(devMode: boolean) {
       return;
     }
 
-    // SQL errors (mssql errors have a 'number' property)
+    // SQL Server driver errors expose a numeric code.
     if ('number' in err && typeof (err as Record<string, unknown>).number === 'number') {
       const message = devMode ? err.message : 'Database error';
       res.status(400).json({

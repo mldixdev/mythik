@@ -103,7 +103,7 @@ interface TableProps {
    * Row click handler. Accepts either:
    * - A function callback (programmatic consumer mode) — invoked with the row
    *   object directly. Used by tests and custom integrations.
-   * - An EventBinding (ActionBinding, ActionBinding[], or TransactionBinding —
+   * - An EventBinding (ActionBinding, TransactionBinding, or an array containing either —
    *   spec-driven canonical mode) — the renderer wraps these into a function
    *   that writes the row to /ui/selectedRow before dispatching the action chain.
    *   See ai-context-runtime-semantics.md § 2.1 for the row context model.
@@ -112,7 +112,7 @@ interface TableProps {
     | EventBinding
     | ((row: Record<string, unknown>) => void);
   onStateChange?: (path: string, value: unknown) => void;
-  dispatchAction?: (binding: EventBinding | EventBinding[] | undefined, row?: Record<string, unknown>) => void;
+  dispatchAction?: (binding: EventBinding | undefined, row?: Record<string, unknown>) => void;
   /** Render an icon by name. When provided, replaces emoji fallbacks with real SVG icons. */
   renderIcon?: (name: string, size: number, color: string) => React.ReactNode;
 

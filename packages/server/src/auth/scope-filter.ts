@@ -1,4 +1,5 @@
 import type { ScopeFilterConfig } from './types.js';
+import type { SqlDriver } from 'mythik/server';
 import { assertValidIdentifier } from 'mythik';
 
 /** @internal Alias used when Mythik wraps a source query before applying scope filters. */
@@ -7,6 +8,12 @@ export const SCOPE_ALIAS = '_scoped';
 export interface ScopeClause {
   sql: string;
   params: Record<string, unknown>;
+}
+
+export interface ScopeWhereOptions {
+  columnOverride?: string;
+  driver?: SqlDriver;
+  qualifier?: string | null;
 }
 
 export function resolveActiveScope(
@@ -28,18 +35,20 @@ export function buildScopeWhereClause(
   userScope: unknown[],
   activeScope: unknown | undefined,
   userRoles: string[],
-  columnOverride?: string,
+  columnOverrideOrOptions?: string | ScopeWhereOptions,
 ): ScopeClause | null {
   const bypassRoles = config.bypassRoles ?? [];
   if (hasBypassRole(bypassRoles, userRoles)) return null;
 
-  const column = columnOverride ?? config.column;
+  const options = normalizeScopeWhereOptions(columnOverrideOrOptions);
+  const column = options.columnOverride ?? config.column;
   assertValidIdentifier(column, 'scopeFilter.column');
   const mode = config.mode ?? 'all';
+  const columnSql = scopeColumnSql(column, options);
 
   if (mode === 'select') {
     return {
-      sql: `${SCOPE_ALIAS}.${column} = @_activeScope`,
+      sql: `${columnSql} = @_activeScope`,
       params: { _activeScope: activeScope },
     };
   }
@@ -54,7 +63,7 @@ export function buildScopeWhereClause(
   userScope.forEach((val, i) => { params[`_scope${i}`] = val; });
 
   return {
-    sql: `${SCOPE_ALIAS}.${column} IN (${paramNames.join(', ')})`,
+    sql: `${columnSql} IN (${paramNames.join(', ')})`,
     params,
   };
 }
@@ -80,4 +89,23 @@ export function wrapQueryWithScopeFilter(
   scopeClause: ScopeClause,
 ): string {
   return `SELECT * FROM (\n${originalSql}\n) AS ${SCOPE_ALIAS}\nWHERE ${scopeClause.sql}`;
+}
+
+function normalizeScopeWhereOptions(value: string | ScopeWhereOptions | undefined): ScopeWhereOptions {
+  if (typeof value === 'string') return { columnOverride: value };
+  return value ?? {};
+}
+
+function scopeColumnSql(column: string, options: ScopeWhereOptions): string {
+  const columnSql = options.driver ? quoteIdentifierPath(options.driver, column) : column;
+  const qualifier = options.qualifier === undefined ? SCOPE_ALIAS : options.qualifier;
+  if (qualifier === null || qualifier === '') return columnSql;
+  assertValidIdentifier(qualifier, 'scopeFilter.qualifier');
+  return `${qualifier}.${columnSql}`;
+}
+
+function quoteIdentifierPath(driver: SqlDriver, identifier: string): string {
+  return identifier.includes('.')
+    ? driver.quoteQualified(...identifier.split('.'))
+    : driver.quoteIdent(identifier);
 }

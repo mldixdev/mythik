@@ -8,7 +8,8 @@ sources: [docs/consumer/ai-context.md#values--formatting, docs/consumer/ai-conte
 # `$template` — string interpolation
 
 `$template` interpolates values into a string. Two reference forms:
-`${/state/path}` reads from state, `${name}` reads from a `$let` binding.
+`${/state/path}` reads from state, `${name}` or `${user.name}` reads from a
+`$let` binding.
 Resolves at the consumption site — at render in element props, at dispatch in
 action params.
 
@@ -38,11 +39,21 @@ Combined with `$let` (when `$item` is needed inside `$template`):
 }
 ```
 
+Nested `$let` binding:
+```json
+{
+  "$let": { "user": { "$state": "/auth/user" } },
+  "$in": { "$template": "Welcome, ${user.name}" }
+}
+```
+
 ## Constraints / Anti-patterns
 
 - **`$template` does NOT resolve `$item` directly.** `$item` is a JSON
   expression, not a string token. Capture in `$let` first (see example
   above) — see also [[@concept-expression-contexts]].
+- **Dotted `$let` binding placeholders require the binding path to exist.**
+  Use them for known object bindings, not optional deep probing.
 - **`$template` does NOT resolve in transaction phases.** Capture row data
   via `setState` before the transaction fires.
 - **Plain strings containing `${...}` are LITERAL** in `DataSourceConfig.url`.

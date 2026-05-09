@@ -7,6 +7,7 @@ import {
   parseParamValue,
 } from '../src/query-engine.js';
 import { SCOPE_ALIAS, buildScopeWhereClause } from '../src/auth/scope-filter.js';
+import { createSqlDriver } from 'mythik/server';
 
 describe('parseParamValue', () => {
   it('converts string to int', () => {
@@ -52,18 +53,34 @@ describe('parseParamValue', () => {
 describe('buildPaginatedQuery', () => {
   const baseQuery = 'SELECT e.*, i.nombre FROM SampleEvents e LEFT JOIN Organizations i ON e.organizationId = i.organizationId WHERE e.year = @year ORDER BY e.year DESC';
 
-  it('appends parameterized OFFSET/FETCH NEXT to query', () => {
-    const result = buildPaginatedQuery(baseQuery);
-    expect(result).toContain('OFFSET @_offset ROWS');
-    expect(result).toContain('FETCH NEXT @_pageSize ROWS ONLY');
+  it('uses SQL Server driver pagination when explicitly provided', () => {
+    const sqlserver = createSqlDriver({ dialect: 'sqlserver', connection: { server: 'localhost', database: 'Mythik' } });
+
+    const result = buildPaginatedQuery(baseQuery, { driver: sqlserver, limit: 20, offset: 40 });
+    expect(result).toContain('OFFSET 40 ROWS');
+    expect(result).toContain('FETCH NEXT 20 ROWS ONLY');
   });
 
   it('preserves original query structure', () => {
-    const result = buildPaginatedQuery(baseQuery);
+    const sqlserver = createSqlDriver({ dialect: 'sqlserver', connection: { server: 'localhost', database: 'Mythik' } });
+
+    const result = buildPaginatedQuery(baseQuery, { driver: sqlserver, limit: 20, offset: 40 });
     expect(result).toContain('SELECT e.*, i.nombre');
     expect(result).toContain('LEFT JOIN');
     expect(result).toContain('WHERE e.year = @year');
     expect(result).toContain('ORDER BY e.year DESC');
+  });
+
+  it('uses driver pagination when driver and numeric bounds are provided', () => {
+    const sqlite = createSqlDriver({ dialect: 'sqlite', connection: { filename: ':memory:' } });
+    const sqlserver = createSqlDriver({ dialect: 'sqlserver', connection: { server: 'localhost', database: 'Mythik' } });
+
+    expect(buildPaginatedQuery('SELECT * FROM screens', { driver: sqlite, limit: 10, offset: 20 })).toBe(
+      'SELECT * FROM screens ORDER BY 1 LIMIT 10 OFFSET 20',
+    );
+    expect(buildPaginatedQuery('SELECT * FROM [screens] ORDER BY [id]', { driver: sqlserver, limit: 10, offset: 20 })).toBe(
+      'SELECT * FROM [screens] ORDER BY [id] OFFSET 20 ROWS FETCH NEXT 10 ROWS ONLY',
+    );
   });
 });
 
@@ -125,6 +142,14 @@ describe('buildCountQuery', () => {
 });
 
 describe('buildEndpointCountQuery', () => {
+  it('uses driver count query for simple unscoped counts', () => {
+    const sqlite = createSqlDriver({ dialect: 'sqlite', connection: { filename: ':memory:' } });
+
+    expect(buildEndpointCountQuery('SELECT * FROM screens ORDER BY id', { driver: sqlite })).toBe(
+      'SELECT COUNT(*) AS total FROM (SELECT * FROM screens ORDER BY id) AS _mythik_count',
+    );
+  });
+
   it('uses generated scoped counts for generated endpoint totals', () => {
     const source = 'SELECT o.id, o.mecanico FROM OrdenesTrabajo o ORDER BY o.id';
     const scopeClause = buildScopeWhereClause(
@@ -237,6 +262,15 @@ describe('buildTotalsQuery', () => {
     const sql = 'SELECT e.id FROM items e ORDER BY e.id';
     const totals = buildTotalsQuery(sql, ['COUNT_DISTINCT:organizationId']);
     expect(totals).toContain('COUNT(DISTINCT organizationId) as [COUNT_DISTINCT:organizationId]');
+  });
+
+  it('quotes total aliases through the driver when provided', () => {
+    const sqlite = createSqlDriver({ dialect: 'sqlite', connection: { filename: ':memory:' } });
+
+    const totals = buildTotalsQuery('SELECT amount FROM invoices', ['SUM:amount', 'COUNT:*'], { driver: sqlite });
+
+    expect(totals).toContain('SUM(amount) as "SUM:amount"');
+    expect(totals).toContain('COUNT(*) as "COUNT:*"');
   });
 
   it('returns null for empty totals array', () => {

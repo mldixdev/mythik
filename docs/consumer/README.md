@@ -12,7 +12,7 @@ Everything an AI or developer building apps with Mythik needs. **This is the pub
 | `ai-context-patterns.md` | Composition patterns + anti-patterns when combining 2+ features |
 | `ai-context-primitives.md` | Per-primitive props tables (38 primitives) |
 | `ai-context-runtime-semantics.md` | Runtime behavior reference — expression timing, reserved state paths, server contracts, store coordination |
-| `reference-doc.md` | Full rule catalog (283 rules) — exhaustive consumer-facing reference |
+| `reference-doc.md` | Full rule catalog — exhaustive consumer-facing reference |
 | `WHERE-TO-LOOK.md` | Source navigation map — which framework file to read for deep-customization or runtime-debugging cases the docs above do not fully cover. Fallback only; check the relevant `ai-context-*.md` first. |
 
 ## Reading order

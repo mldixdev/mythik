@@ -1,4 +1,4 @@
-import type { ConnectionPool } from 'mssql';
+import type { SqlDialect, SqlDriver } from 'mythik/server';
 import type { AuthConfig, JwtConfig, EndpointScopeOverride } from './auth/types.js';
 import type { AuditConfig } from './audit.js';
 
@@ -7,6 +7,7 @@ import type { AuditConfig } from './audit.js';
 export interface ApiSpec {
   type: 'api';
   name?: string;
+  dialect?: SqlDialect;
   auth?: ApiAuthConfig;
   catalogs?: Record<string, CatalogConfig>;
   endpoints?: Record<string, EndpointConfig>;
@@ -43,14 +44,52 @@ export interface MythikServerConfig {
 
 // --- Connection ---
 
-export interface ConnectionConfig {
+export interface SqlServerConnectionConfig {
+  type?: 'sqlserver';
   server: string;
   database: string;
   user?: string;
   password?: string;
   port?: number;
+  trustedConnection?: boolean;
   trustServerCertificate?: boolean;
 }
+
+export interface PostgresConnectionConfig {
+  type: 'postgres';
+  connectionString?: string;
+  host?: string;
+  port?: number;
+  database?: string;
+  user?: string;
+  password?: string;
+  ssl?: boolean | Record<string, unknown>;
+}
+
+export interface MysqlConnectionConfig {
+  type: 'mysql';
+  uri?: string;
+  host?: string;
+  port?: number;
+  database?: string;
+  user?: string;
+  password?: string;
+  ssl?: boolean | Record<string, unknown>;
+}
+
+export interface SqliteConnectionConfig {
+  type: 'sqlite';
+  filename?: string;
+  readonly?: boolean;
+  fileMustExist?: boolean;
+  timeout?: number;
+}
+
+export type ConnectionConfig =
+  | SqlServerConnectionConfig
+  | PostgresConnectionConfig
+  | MysqlConnectionConfig
+  | SqliteConnectionConfig;
 
 // --- Catalogs ---
 
@@ -97,20 +136,9 @@ export interface CrudConfig {
   updatable: string[];
 }
 
-// --- Handlers ---
-
-export interface SqlTypes {
-  Int: unknown;
-  Float: unknown;
-  Bit: unknown;
-  NVarChar: unknown;
-  DateTime: unknown;
-}
-
 export interface HandlerContext {
   params: Record<string, unknown>;
-  db: ConnectionPool;
-  sql: SqlTypes;
+  db: SqlDriver;
   user: UserContext | null;
   query: Record<string, string>;
   body: unknown;

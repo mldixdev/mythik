@@ -1,9 +1,9 @@
 # mythik-react-native
 
 The React Native rendering surface for Mythik — **preview track,
-not on npm**. The `v0.1.1` public release ships `mythik-react` as the
-supported renderer; this package is in active development at a
-verification bar below the published packages.
+not on npm**. The supported renderer in the public npm surface is
+`mythik-react`; this package is in active development at a verification
+bar below the published packages.
 
 > See [the framework README on GitHub](https://github.com/mldixdev/mythik#readme)
 > for the full Mythik architecture and design philosophy.
@@ -30,10 +30,10 @@ need RN-specific implementations (typically via libraries like
 `expo-linear-gradient`) before the package can claim the same
 guarantees.
 
-Publishing it now would dilute what `v0.1.1` means. The preview lives
-in this repository so motivated contributors and early adopters can
-experiment, file issues, and feed back into the design — without the
-publish step pretending readiness it doesn't have.
+Publishing it now would dilute what the supported publish surface
+means. The preview lives in this repository so motivated contributors
+and early adopters can experiment, file issues, and feed back into the
+design — without the publish step pretending readiness it doesn't have.
 
 ## What it aims to provide
 
@@ -54,7 +54,7 @@ contract are shared.
 
 ## Recommended path for now
 
-For production Mythik apps on `v0.1.1`, install:
+For production Mythik apps, install:
 
 ```bash
 npm install mythik mythik-react

@@ -15,7 +15,7 @@ Compiled from `docs/consumer/` into **327 atomic articles**. The wiki is optimiz
 ## Publish notes
 
 - Public package names are unscoped: `mythik`, `mythik-react`, `mythik-cli`, `mythik-server`.
-- React Native work is a repository preview track, not part of the initial npm publish surface.
+- React Native work is a repository preview track, not part of the supported npm publish surface yet.
 - The wiki metadata folder is not publish content.
 - `docs/consumer` remains the canonical source.
 

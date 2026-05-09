@@ -12,7 +12,7 @@ Mythik publishes unscoped npm packages. Do not generate scoped package imports f
 | Public package | Use |
 |---|---|
 | `mythik` | Browser-safe core runtime, state, expressions, validation, browser-safe stores |
-| `mythik/server` | Node-only stores exported from the core package subpath |
+| `mythik/server` | Node-only stores, SQL drivers, and SQL DDL helpers exported from the core package subpath |
 | `mythik-react` | React host, renderer, and web primitives |
 | `mythik-cli` | CLI package; installs the `mythik` binary |
 | `mythik-cli/api` | Programmatic CLI API: `runPush`, `runPatch`, `runLint`, and related types |
@@ -28,6 +28,8 @@ npm install mythik mythik-react
 npm install -D mythik-cli
 ```
 
-Add `mythik-server` only when building a Mythik-backed Node server. React Native work is a repository preview track, not part of the initial npm publish surface.
+Add `mythik-server` only when building a Mythik-backed Node server. React Native work is a repository preview track, not part of the supported npm publish surface yet.
+
+SQL adapters (`mssql`, `pg`, `mysql2`, `better-sqlite3`) are optional dependencies of `mythik`. They install by default with npm/pnpm unless optional dependencies are omitted.
 
 Related: [[@cli-docs]], [[@cli-programmatic-api]], [[@concept-spec-stores-catalog]], [[@concept-where-to-look]].

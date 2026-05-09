@@ -1,7 +1,77 @@
-import type { SpecStore, VersionedSpecStore, EnvironmentStore } from 'mythik';
-import type { MythikConfig } from '../config.js';
-import { MemorySpecStore, SupabaseSpecStore, MemoryVersionedSpecStore, MemoryEnvironmentStore, SupabaseVersionedSpecStore, SupabaseEnvironmentStore } from 'mythik';
-import { FileSpecStore, SqlServerSpecStore, SqlServerVersionedSpecStore, SqlServerEnvironmentStore } from 'mythik/server';
+import type { EnvironmentStore, SpecStore, VersionedSpecStore } from 'mythik';
+import {
+  MemoryEnvironmentStore,
+  MemorySpecStore,
+  MemoryVersionedSpecStore,
+  SupabaseEnvironmentStore,
+  SupabaseSpecStore,
+  SupabaseVersionedSpecStore,
+} from 'mythik';
+import {
+  createSqlDriver,
+  FileSpecStore,
+  SqlEnvironmentStore,
+  SqlSpecStore,
+  SqlVersionedSpecStore,
+  type SqlDriver,
+} from 'mythik/server';
+
+import {
+  isSqlStoreType,
+  SUPPORTED_STORE_TYPES,
+  type MythikConfig,
+  type MythikSqlConfig,
+} from '../config.js';
+
+function requireSqlConfig(config: MythikConfig): MythikSqlConfig {
+  if (!isSqlStoreType(config.store)) {
+    throw new Error(`Store "${config.store}" is not a SQL dialect store.`);
+  }
+  if (!config.sql) {
+    throw new Error(`SQL config for "${config.store}" is missing.`);
+  }
+  if (config.sql.dialect !== config.store) {
+    throw new Error(`SQL config dialect "${config.sql.dialect}" does not match store "${config.store}".`);
+  }
+  return config.sql;
+}
+
+function createDriverBackedStore(config: MythikConfig): SqlSpecStore {
+  const sql = requireSqlConfig(config);
+  const driver = createSqlDriver({ dialect: sql.dialect, connection: sql.connection });
+  return new SqlSpecStore({ driver, table: sql.table, closeDriver: true });
+}
+
+function sharedDriverHandle(driver: SqlDriver, ref: { count: number; closed: boolean }): SqlDriver {
+  return {
+    get dialect() { return driver.dialect; },
+    get capabilities() { return driver.capabilities; },
+    connect: () => driver.connect(),
+    close: async () => {
+      if (ref.closed) return;
+      ref.count -= 1;
+      if (ref.count <= 0) {
+        ref.closed = true;
+        await driver.close();
+      }
+    },
+    transaction: (run) => driver.transaction(run),
+    query: (statement, params) => driver.query(statement, params),
+    exec: (statement, params) => driver.exec(statement, params),
+    quoteIdent: (identifier) => driver.quoteIdent(identifier),
+    quoteQualified: (...identifiers) => driver.quoteQualified(...identifiers),
+    compileNamedParams: (statement, params) => driver.compileNamedParams(statement, params),
+    paginate: (statement, limit, offset) => driver.paginate(statement, limit, offset),
+    countQuery: (statement) => driver.countQuery(statement),
+    totalsQuery: (statement) => driver.totalsQuery(statement),
+    buildInsertReturning: (table, values, returning) => driver.buildInsertReturning(table, values, returning),
+    buildUpdateReturning: (table, values, where, returning) => driver.buildUpdateReturning(table, values, where, returning),
+    buildDelete: (table, where) => driver.buildDelete(table, where),
+    buildUpsert: (table, values, keys) => driver.buildUpsert(table, values, keys),
+    tableExists: (table) => driver.tableExists(table),
+    mapError: (error) => driver.mapError(error),
+  };
+}
 
 export function resolveStore(config: MythikConfig): SpecStore {
   switch (config.store) {
@@ -12,10 +82,10 @@ export function resolveStore(config: MythikConfig): SpecStore {
       return new SupabaseSpecStore(config.supabase);
 
     case 'sqlserver':
-      if (!config.sqlserver?.server || !config.sqlserver?.database) {
-        throw new Error('SQL Server config requires "server" and "database"');
-      }
-      return new SqlServerSpecStore(config.sqlserver);
+    case 'postgres':
+    case 'mysql':
+    case 'sqlite':
+      return createDriverBackedStore(config);
 
     case 'file':
       return new FileSpecStore({ directory: config.file?.dir ?? './specs' });
@@ -24,31 +94,17 @@ export function resolveStore(config: MythikConfig): SpecStore {
       return new MemorySpecStore();
 
     default:
-      throw new Error(
-        `Unknown store: "${config.store}". Available: supabase, sqlserver, file, memory`
-      );
+      throw new Error(`Unknown store: "${config.store}". Available: ${SUPPORTED_STORE_TYPES.join(', ')}`);
   }
 }
 
-/**
- * Resolve a VersionedSpecStore + EnvironmentStore from config.
- * Currently only memory store has a versioned implementation.
- */
-export function resolveVersionedStore(config: MythikConfig): { store: VersionedSpecStore; envStore: EnvironmentStore } {
+export function resolveVersionedStore(config: MythikConfig): {
+  store: VersionedSpecStore;
+  envStore: EnvironmentStore;
+} {
   if (config.store === 'memory') {
     const store = new MemoryVersionedSpecStore();
     const envStore = new MemoryEnvironmentStore();
-    return { store, envStore };
-  }
-
-  if (config.store === 'sqlserver') {
-    if (!config.sqlserver?.server || !config.sqlserver?.database) {
-      throw new Error('SQL Server config requires "server" and "database"');
-    }
-    const store = new SqlServerVersionedSpecStore(config.sqlserver);
-    // Environment store uses its own fixed table — don't pass the --table override
-    const { table: _, ...envConfig } = config.sqlserver;
-    const envStore = new SqlServerEnvironmentStore(envConfig);
     return { store, envStore };
   }
 
@@ -62,7 +118,27 @@ export function resolveVersionedStore(config: MythikConfig): { store: VersionedS
     return { store, envStore };
   }
 
+  if (isSqlStoreType(config.store)) {
+    const sql = requireSqlConfig(config);
+    const driver = createSqlDriver({ dialect: sql.dialect, connection: sql.connection });
+    const closeRef = { count: 2, closed: false };
+    return {
+      store: new SqlVersionedSpecStore({
+        driver: sharedDriverHandle(driver, closeRef),
+        table: sql.table,
+        versionsTable: sql.versionsTable,
+        snapshotInterval: sql.snapshotInterval,
+        closeDriver: true,
+      }),
+      envStore: new SqlEnvironmentStore({
+        driver: sharedDriverHandle(driver, closeRef),
+        table: sql.environmentsTable,
+        closeDriver: true,
+      }),
+    };
+  }
+
   throw new Error(
-    `Versioned store not yet available for "${config.store}". Currently supported: memory, sqlserver, supabase.`
+    `Versioned store not yet available for "${config.store}". Currently supported: memory, sqlserver, postgres, mysql, sqlite, supabase.`,
   );
 }

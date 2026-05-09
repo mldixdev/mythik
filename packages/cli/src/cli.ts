@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import { loadConfig } from './config.js';
+import { loadConfig, withStoreTableOverride } from './config.js';
 import { resolveStore } from './stores/resolver.js';
 import { runManifest } from './commands/manifest.js';
 import { runElements } from './commands/elements.js';
 import { runPatch, parsePatchInput } from './commands/patch.js';
 import { runValidate } from './commands/validate.js';
 import { runInit } from './commands/init.js';
+import { runInitStore } from './commands/init-store.js';
 import { runPull } from './commands/pull.js';
 import { runPush } from './commands/push.js';
 import { runDelete } from './commands/delete.js';
@@ -25,21 +26,28 @@ import { resolveInput } from './input-resolver.js';
 import { runPushBulk } from './commands/push-bulk.js';
 
 const program = new Command();
+const STORE_HELP = 'Store type (supabase, sqlserver, postgres, mysql, sqlite, file, memory)';
 
 program
   .name('mythik')
   .description('Mythik CLI — manage specs via SpecEngine')
-  .version('0.1.2');
+  .version('0.1.3');
 
 program
   .command('manifest <screen>')
   .description('Show structural tree of a screen spec')
   .option('--json', 'Output as JSON', false)
-  .option('--store <type>', 'Store type (supabase, file, memory)')
+  .option('--store <type>', STORE_HELP)
   .option('--table <name>', 'Table name override (e.g., api_specs)')
   .option('--url <url>', 'Supabase URL')
   .option('--key <key>', 'Supabase API key')
+  .option('--server <host>', 'SQL Server host')
+  .option('--database <name>', 'SQL Server database name')
+  .option('--user <user>', 'SQL database user')
+  .option('--password <password>', 'SQL database password')
+  .option('--port <port>', 'SQL database port')
   .option('--dir <dir>', 'File store directory')
+  .option('--filename <file>', 'SQLite database file')
   .action(async (screen: string, opts) => {
     try {
       const config = loadConfig({ flags: opts });
@@ -58,11 +66,17 @@ program
   .description('Show details of specific elements by ID (comma-separated)')
   .option('--json', 'Output as JSON', false)
   .option('--toon', 'Output in TOON format (token-efficient)', false)
-  .option('--store <type>', 'Store type (supabase, file, memory)')
+  .option('--store <type>', STORE_HELP)
   .option('--table <name>', 'Table name override (e.g., api_specs)')
   .option('--url <url>', 'Supabase URL')
   .option('--key <key>', 'Supabase API key')
+  .option('--server <host>', 'SQL Server host')
+  .option('--database <name>', 'SQL Server database name')
+  .option('--user <user>', 'SQL database user')
+  .option('--password <password>', 'SQL database password')
+  .option('--port <port>', 'SQL database port')
   .option('--dir <dir>', 'File store directory')
+  .option('--filename <file>', 'SQLite database file')
   .action(async (screen: string, ids: string, opts) => {
     try {
       const config = loadConfig({ flags: opts });
@@ -85,11 +99,17 @@ program
   .option('--author <name>', 'Author name for version history')
   .option('--description <text>', 'Description for version history')
   .option('--from-file <path>', 'Read patches from file (use "-" for stdin)')
-  .option('--store <type>', 'Store type (supabase, file, memory)')
+  .option('--store <type>', STORE_HELP)
   .option('--table <name>', 'Table name override (e.g., api_specs)')
   .option('--url <url>', 'Supabase URL')
   .option('--key <key>', 'Supabase API key')
+  .option('--server <host>', 'SQL Server host')
+  .option('--database <name>', 'SQL Server database name')
+  .option('--user <user>', 'SQL database user')
+  .option('--password <password>', 'SQL database password')
+  .option('--port <port>', 'SQL database port')
   .option('--dir <dir>', 'File store directory')
+  .option('--filename <file>', 'SQLite database file')
   .action(async (screen: string, patchesArg: string | undefined, opts) => {
     try {
       const config = loadConfig({ flags: opts });
@@ -126,11 +146,17 @@ program
   .command('validate <screen>')
   .description('Validate a screen spec for errors')
   .option('--json', 'Output as JSON', false)
-  .option('--store <type>', 'Store type (supabase, file, memory)')
+  .option('--store <type>', STORE_HELP)
   .option('--table <name>', 'Table name override (e.g., api_specs)')
   .option('--url <url>', 'Supabase URL')
   .option('--key <key>', 'Supabase API key')
+  .option('--server <host>', 'SQL Server host')
+  .option('--database <name>', 'SQL Server database name')
+  .option('--user <user>', 'SQL database user')
+  .option('--password <password>', 'SQL database password')
+  .option('--port <port>', 'SQL database port')
   .option('--dir <dir>', 'File store directory')
+  .option('--filename <file>', 'SQLite database file')
   .action(async (screen: string, opts) => {
     try {
       const config = loadConfig({ flags: opts });
@@ -147,17 +173,60 @@ program
 program
   .command('init')
   .description('Initialize Mythik CLI configuration')
-  .option('--store <type>', 'Store type (supabase, file, memory)')
+  .option('--store <type>', STORE_HELP)
   .option('--table <name>', 'Table name override (e.g., api_specs)')
   .option('--url <url>', 'Supabase URL')
   .option('--key <key>', 'Supabase API key')
+  .option('--server <host>', 'SQL Server host')
+  .option('--database <name>', 'SQL Server database name')
+  .option('--user <user>', 'SQL database user')
+  .option('--password <password>', 'SQL database password')
+  .option('--port <port>', 'SQL database port')
   .option('--dir <dir>', 'File store directory')
+  .option('--filename <file>', 'SQLite database file')
   .action(async (opts) => {
     try {
       const result = await runInit(opts, process.cwd());
       if (result.output) {
         process.stdout.write(result.output + '\n');
       }
+      process.exit(result.exitCode);
+    } catch (err) {
+      console.error((err as Error).message);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('init-store')
+  .description('Initialize Mythik-managed SQL store tables')
+  .requiredOption('--dialect <dialect>', 'SQL dialect (sqlserver, postgres, mysql, sqlite)')
+  .option('--target <file>', 'SQLite database file target')
+  .option('--url <url>', 'Database URL for PostgreSQL, MySQL, or SQL Server')
+  .option('--server <host>', 'SQL Server host')
+  .option('--database <name>', 'SQL Server database name')
+  .option('--user <user>', 'SQL Server user')
+  .option('--password <password>', 'SQL Server password')
+  .option('--port <port>', 'SQL Server port')
+  .option('--encrypt <value>', 'SQL Server encrypt option (true or false)')
+  .option('--trust-server-certificate', 'Trust SQL Server self-signed certificates')
+  .option('--dry-run', 'Print canonical DDL without connecting', false)
+  .action(async (opts) => {
+    try {
+      const result = await runInitStore({
+        dialect: opts.dialect,
+        target: opts.target,
+        url: opts.url,
+        server: opts.server,
+        database: opts.database,
+        user: opts.user,
+        password: opts.password,
+        port: opts.port,
+        encrypt: opts.encrypt,
+        trustServerCertificate: opts.trustServerCertificate === true,
+        dryRun: opts.dryRun === true,
+      });
+      process.stdout.write(result.output + '\n');
       process.exit(result.exitCode);
     } catch (err) {
       console.error((err as Error).message);
@@ -174,11 +243,17 @@ program
   .option('--description <text>', 'Description for version history')
   .option('--from-file <path>', 'Read spec from file (use "-" for stdin)')
   .option('--from-dir <folder>', 'Push every *.json file in <folder> (filename stem = spec id)')
-  .option('--store <type>', 'Store type (supabase, file, memory, sqlserver)')
+  .option('--store <type>', STORE_HELP)
   .option('--table <name>', 'Table name override (e.g., api_specs)')
   .option('--url <url>', 'Supabase URL')
   .option('--key <key>', 'Supabase API key')
+  .option('--server <host>', 'SQL Server host')
+  .option('--database <name>', 'SQL Server database name')
+  .option('--user <user>', 'SQL database user')
+  .option('--password <password>', 'SQL database password')
+  .option('--port <port>', 'SQL database port')
   .option('--dir <dir>', 'File store directory')
+  .option('--filename <file>', 'SQLite database file')
   .action(async (screen: string | undefined, opts) => {
     try {
       const config = loadConfig({ flags: opts });
@@ -238,11 +313,17 @@ program
   .description('Export a full screen spec to stdout')
   .option('--json', 'Wrap output in JSON object', false)
   .option('--toon', 'Output in TOON format', false)
-  .option('--store <type>', 'Store type (supabase, file, memory, sqlserver)')
+  .option('--store <type>', STORE_HELP)
   .option('--table <name>', 'Table name override (e.g., api_specs)')
   .option('--url <url>', 'Supabase URL')
   .option('--key <key>', 'Supabase API key')
+  .option('--server <host>', 'SQL Server host')
+  .option('--database <name>', 'SQL Server database name')
+  .option('--user <user>', 'SQL database user')
+  .option('--password <password>', 'SQL database password')
+  .option('--port <port>', 'SQL database port')
   .option('--dir <dir>', 'File store directory')
+  .option('--filename <file>', 'SQLite database file')
   .action(async (screen: string, opts) => {
     try {
       const config = loadConfig({ flags: opts });
@@ -261,11 +342,17 @@ program
   .description('Delete a screen spec from the store')
   .option('--confirm', 'Actually delete (without this flag, preview only)', false)
   .option('--json', 'Output as JSON', false)
-  .option('--store <type>', 'Store type (supabase, file, memory, sqlserver)')
+  .option('--store <type>', STORE_HELP)
   .option('--table <name>', 'Table name override (e.g., api_specs)')
   .option('--url <url>', 'Supabase URL')
   .option('--key <key>', 'Supabase API key')
+  .option('--server <host>', 'SQL Server host')
+  .option('--database <name>', 'SQL Server database name')
+  .option('--user <user>', 'SQL database user')
+  .option('--password <password>', 'SQL database password')
+  .option('--port <port>', 'SQL database port')
   .option('--dir <dir>', 'File store directory')
+  .option('--filename <file>', 'SQLite database file')
   .action(async (screen: string, opts) => {
     try {
       const config = loadConfig({ flags: opts });
@@ -290,11 +377,17 @@ program
   .option('--base-url <url>', 'Base URL to strip from fetch URLs')
   .option('--api-table <table>', 'Table name for api-specs (when stored separately)')
   .option('--json', 'Output as JSON', false)
-  .option('--store <type>', 'Store type (supabase, file, memory, sqlserver)')
+  .option('--store <type>', STORE_HELP)
   .option('--table <name>', 'Table name override (e.g., api_specs)')
   .option('--url <url>', 'Supabase URL')
   .option('--key <key>', 'Supabase API key')
+  .option('--server <host>', 'SQL Server host')
+  .option('--database <name>', 'SQL Server database name')
+  .option('--user <user>', 'SQL database user')
+  .option('--password <password>', 'SQL database password')
+  .option('--port <port>', 'SQL database port')
   .option('--dir <dir>', 'File store directory')
+  .option('--filename <file>', 'SQLite database file')
   .action(async (opts) => {
     try {
       const config = loadConfig({ flags: opts });
@@ -304,10 +397,7 @@ program
       // If --api-table is provided, create a separate store for api-specs
       let apiStore: import('mythik').SpecStore | undefined;
       if (opts.apiTable) {
-        const apiConfig = { ...config };
-        if (apiConfig.sqlserver) apiConfig.sqlserver = { ...apiConfig.sqlserver, table: opts.apiTable };
-        if (apiConfig.supabase) apiConfig.supabase = { ...apiConfig.supabase, table: opts.apiTable };
-        apiStore = resolveStore(apiConfig);
+        apiStore = resolveStore(withStoreTableOverride(config, opts.apiTable));
       }
 
       const result = await runContractCommand({
@@ -333,8 +423,18 @@ program
   .description('Show version history for a spec')
   .option('--limit <n>', 'Limit number of versions shown', parseInt)
   .option('--json', 'Output as JSON', false)
-  .option('--store <type>', 'Store type')
+  .option('--store <type>', STORE_HELP)
   .option('--table <name>', 'Table name override (e.g., api_specs)')
+  .option('--versions-table <name>', 'SQL version history table name')
+  .option('--environments-table <name>', 'SQL environment pointer table name')
+  .option('--snapshot-interval <n>', 'SQL version snapshot interval')
+  .option('--url <url>', 'Database URL')
+  .option('--server <host>', 'SQL Server host')
+  .option('--database <name>', 'SQL Server database name')
+  .option('--user <user>', 'SQL database user')
+  .option('--password <password>', 'SQL database password')
+  .option('--port <port>', 'SQL database port')
+  .option('--filename <file>', 'SQLite database file')
   .action(async (specId: string, opts) => {
     try {
       const config = loadConfig({ flags: opts });
@@ -352,8 +452,18 @@ program
   .command('diff <specId> <from> [to]')
   .description('Show structural diff between two versions or environments')
   .option('--json', 'Output as JSON', false)
-  .option('--store <type>', 'Store type')
+  .option('--store <type>', STORE_HELP)
   .option('--table <name>', 'Table name override (e.g., api_specs)')
+  .option('--versions-table <name>', 'SQL version history table name')
+  .option('--environments-table <name>', 'SQL environment pointer table name')
+  .option('--snapshot-interval <n>', 'SQL version snapshot interval')
+  .option('--url <url>', 'Database URL')
+  .option('--server <host>', 'SQL Server host')
+  .option('--database <name>', 'SQL Server database name')
+  .option('--user <user>', 'SQL database user')
+  .option('--password <password>', 'SQL database password')
+  .option('--port <port>', 'SQL database port')
+  .option('--filename <file>', 'SQLite database file')
   .action(async (specId: string, from: string, to: string | undefined, opts) => {
     try {
       const config = loadConfig({ flags: opts });
@@ -373,8 +483,18 @@ program
   .option('--set <env=version>', 'Set environment pointer (e.g., --set dev=12)')
   .option('--author <name>', 'Author for set operation')
   .option('--json', 'Output as JSON', false)
-  .option('--store <type>', 'Store type')
+  .option('--store <type>', STORE_HELP)
   .option('--table <name>', 'Table name override (e.g., api_specs)')
+  .option('--versions-table <name>', 'SQL version history table name')
+  .option('--environments-table <name>', 'SQL environment pointer table name')
+  .option('--snapshot-interval <n>', 'SQL version snapshot interval')
+  .option('--url <url>', 'Database URL')
+  .option('--server <host>', 'SQL Server host')
+  .option('--database <name>', 'SQL Server database name')
+  .option('--user <user>', 'SQL database user')
+  .option('--password <password>', 'SQL database password')
+  .option('--port <port>', 'SQL database port')
+  .option('--filename <file>', 'SQLite database file')
   .action(async (specId: string, opts) => {
     try {
       const config = loadConfig({ flags: opts });
@@ -396,8 +516,18 @@ program
   .option('--author <name>', 'Author name', 'system')
   .option('--description <text>', 'Description for the rollback version')
   .option('--json', 'Output as JSON', false)
-  .option('--store <type>', 'Store type')
+  .option('--store <type>', STORE_HELP)
   .option('--table <name>', 'Table name override (e.g., api_specs)')
+  .option('--versions-table <name>', 'SQL version history table name')
+  .option('--environments-table <name>', 'SQL environment pointer table name')
+  .option('--snapshot-interval <n>', 'SQL version snapshot interval')
+  .option('--url <url>', 'Database URL')
+  .option('--server <host>', 'SQL Server host')
+  .option('--database <name>', 'SQL Server database name')
+  .option('--user <user>', 'SQL database user')
+  .option('--password <password>', 'SQL database password')
+  .option('--port <port>', 'SQL database port')
+  .option('--filename <file>', 'SQLite database file')
   .action(async (specId: string, opts) => {
     try {
       const config = loadConfig({ flags: opts });
@@ -423,8 +553,18 @@ program
   .option('--confirm', 'Execute promotion (without this, preview only)', false)
   .option('--author <name>', 'Author name', 'system')
   .option('--json', 'Output as JSON', false)
-  .option('--store <type>', 'Store type')
+  .option('--store <type>', STORE_HELP)
   .option('--table <name>', 'Table name override (e.g., api_specs)')
+  .option('--versions-table <name>', 'SQL version history table name')
+  .option('--environments-table <name>', 'SQL environment pointer table name')
+  .option('--snapshot-interval <n>', 'SQL version snapshot interval')
+  .option('--url <url>', 'Database URL')
+  .option('--server <host>', 'SQL Server host')
+  .option('--database <name>', 'SQL Server database name')
+  .option('--user <user>', 'SQL database user')
+  .option('--password <password>', 'SQL database password')
+  .option('--port <port>', 'SQL database port')
+  .option('--filename <file>', 'SQLite database file')
   .action(async (specIds: string[], opts) => {
     try {
       const config = loadConfig({ flags: opts });

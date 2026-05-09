@@ -12,6 +12,19 @@ describe('validateApiSpec — basic', () => {
     expect(result.errors).toHaveLength(0);
   });
 
+  it('accepts supported SQL dialects', () => {
+    for (const dialect of ['sqlserver', 'postgres', 'mysql', 'sqlite']) {
+      const result = validateApiSpec(makeSpec({ dialect }));
+      expect(result.valid).toBe(true);
+    }
+  });
+
+  it('rejects unsupported SQL dialects', () => {
+    const result = validateApiSpec(makeSpec({ dialect: 'oracle' }));
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('dialect must be one of: sqlserver, postgres, mysql, sqlite');
+  });
+
   it('catalog with from but missing value → error', () => {
     const result = validateApiSpec(makeSpec({
       catalogs: { test: { from: 'MyTable', label: 'nombre' } },

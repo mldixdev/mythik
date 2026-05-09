@@ -12,17 +12,19 @@ sources: [docs/consumer/ai-context.md, docs/consumer/WHERE-TO-LOOK.md]
 | Package | Purpose |
 |---|---|
 | `mythik` | Browser-safe core. State, expressions, validation, renderer engine, design, auth, data, security, and browser-safe spec stores |
-| `mythik/server` | Node-only spec stores: `FileSpecStore`, `SqlServerSpecStore`, and versioned/environment variants |
+| `mythik/server` | Node-only spec stores, SQL drivers, and SQL DDL helpers: `FileSpecStore`, `SqlSpecStore`, `SqlVersionedSpecStore`, `SqlEnvironmentStore`, `createSqlDriver`, `getSqlStoreDdl`, and SQL Server compatibility stores |
 | `mythik-react` | React host, renderer, and web primitives |
 | `mythik-cli` | CLI package; installs the `mythik` command |
 | `mythik-cli/api` | Programmatic CLI API: `runPush`, `runPatch`, `runLint`, `parsePatchInput`, and types |
 | `mythik-server` | Express server runtime for ApiSpecs |
 
-React Native work lives in the repository as a preview track and is not part of the initial npm publish surface.
+React Native work lives in the repository as a preview track and is not part of the supported npm publish surface yet.
 
 ## Browser vs server core entries
 
-The default `mythik` entry is browser-safe by construction. Node-only stores live behind the `mythik/server` subpath so browser bundles do not pull `fs`, `mssql`, or other Node-only dependencies.
+The default `mythik` entry is browser-safe by construction. Node-only stores and SQL drivers live behind the `mythik/server` subpath so browser bundles do not pull `fs`, SQL adapters, or other Node-only dependencies.
+
+SQL adapters (`mssql`, `pg`, `mysql2`, `better-sqlite3`) are optional dependencies of `mythik`. npm/pnpm install optional dependencies by default; if optional dependencies are omitted, install the adapter for the database in use.
 
 ## Programmatic CLI API
 

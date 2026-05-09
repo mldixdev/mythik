@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { createSqlDriver } from 'mythik/server';
 import { buildInsertQuery, buildUpdateQuery, buildDeleteQuery, filterFields } from '../src/crud-builder.js';
 import type { CrudConfig } from '../src/types.js';
 
@@ -24,43 +25,72 @@ describe('filterFields', () => {
 });
 
 describe('buildInsertQuery', () => {
-  it('generates INSERT with parameterized values and SELECT back', () => {
+  it('generates SQL Server INSERT through the driver helper', () => {
+    const driver = createSqlDriver({ dialect: 'sqlserver', connection: { server: 'localhost', database: 'Mythik' } });
     const fields = { organizationId: 1, categoryId: 2, allocatedAmount: 100 };
-    const { sql, params } = buildInsertQuery(crud.table, fields, crud.primaryKey);
+    const { sql, params } = buildInsertQuery(driver, crud.table, fields);
     expect(sql).toContain('INSERT INTO [SampleRecords]');
     expect(sql).toContain('[organizationId]');
     expect(sql).toContain('@organizationId');
-    expect(sql).not.toContain('OUTPUT'); // trigger-safe: no OUTPUT clause
-    expect(sql).toContain('SCOPE_IDENTITY()'); // returns inserted row
+    expect(sql).toContain('OUTPUT INSERTED.*');
+    expect(sql).not.toContain('SCOPE_IDENTITY()');
     expect(params).toEqual({ organizationId: 1, categoryId: 2, allocatedAmount: 100 });
   });
 
-  it('generates INSERT without SELECT back when no primaryKey', () => {
+  it('generates SQLite INSERT through the driver helper', () => {
+    const driver = createSqlDriver({ dialect: 'sqlite', connection: { filename: ':memory:' } });
     const fields = { name: 'test' };
-    const { sql } = buildInsertQuery('MyTable', fields);
-    expect(sql).not.toContain('SCOPE_IDENTITY');
-    expect(sql).toContain('INSERT INTO [MyTable]');
+    const { sql, params } = buildInsertQuery(driver, 'MyTable', fields);
+    expect(sql).toBe('INSERT INTO "MyTable" ("name") VALUES (@name) RETURNING *');
+    expect(params).toEqual({ name: 'test' });
+  });
+
+  it('generates MySQL INSERT without RETURNING', () => {
+    const driver = createSqlDriver({ dialect: 'mysql', connection: 'mysql://localhost/mythik' });
+    const fields = { name: 'test' };
+    const { sql, params } = buildInsertQuery(driver, 'MyTable', fields);
+    expect(sql).toBe('INSERT INTO `MyTable` (`name`) VALUES (@name)');
+    expect(sql).not.toContain('RETURNING');
+    expect(params).toEqual({ name: 'test' });
   });
 });
 
 describe('buildUpdateQuery', () => {
-  it('generates UPDATE with SET and WHERE on primary key', () => {
+  it('generates UPDATE through the driver helper', () => {
+    const driver = createSqlDriver({ dialect: 'sqlite', connection: { filename: ':memory:' } });
     const fields = { allocatedAmount: 200, spentAmount: 150 };
-    const { sql, params } = buildUpdateQuery(crud.table, crud.primaryKey, 42, fields);
-    expect(sql).toContain('UPDATE [SampleRecords]');
-    expect(sql).toContain('[allocatedAmount] = @allocatedAmount');
-    expect(sql).toContain('[spentAmount] = @spentAmount');
-    expect(sql).toContain('WHERE [recordId] = @_pkValue');
-    expect(sql).toContain('SELECT * FROM'); // trigger-safe: SELECT after UPDATE
+    const { sql, params } = buildUpdateQuery(driver, crud.table, crud.primaryKey, 42, fields);
+    expect(sql).toContain('UPDATE "SampleRecords"');
+    expect(sql).toContain('"allocatedAmount" = @set_allocatedAmount');
+    expect(sql).toContain('"spentAmount" = @set_spentAmount');
+    expect(sql).toContain('WHERE "recordId" = @_pkValue');
+    expect(sql).toContain('RETURNING *');
     expect(params._pkValue).toBe(42);
+  });
+
+  it('builds scoped UPDATE without string replacement of WHERE', () => {
+    const driver = createSqlDriver({ dialect: 'mysql', connection: 'mysql://localhost/mythik' });
+    const fields = { allocatedAmount: 200 };
+    const { sql, params } = buildUpdateQuery(
+      driver,
+      crud.table,
+      crud.primaryKey,
+      42,
+      fields,
+      { sql: '`organizationId` = @_scope0', params: { _scope0: 7 } },
+    );
+    expect(sql).toBe(
+      'UPDATE `SampleRecords` SET `allocatedAmount` = @set_allocatedAmount WHERE (`organizationId` = @_scope0) AND `recordId` = @_pkValue',
+    );
+    expect(params).toMatchObject({ _scope0: 7, _pkValue: 42, set_allocatedAmount: 200 });
   });
 });
 
 describe('buildDeleteQuery', () => {
-  it('generates DELETE with WHERE on primary key', () => {
-    const { sql, params } = buildDeleteQuery(crud.table, crud.primaryKey, 42);
-    expect(sql).toContain('DELETE FROM [SampleRecords]');
-    expect(sql).toContain('WHERE [recordId] = @_pkValue');
+  it('generates DELETE through the driver helper', () => {
+    const driver = createSqlDriver({ dialect: 'postgres', connection: { connectionString: 'postgres://localhost/mythik' } });
+    const { sql, params } = buildDeleteQuery(driver, crud.table, crud.primaryKey, 42);
+    expect(sql).toBe('DELETE FROM "SampleRecords" WHERE "recordId" = @_pkValue');
     expect(params._pkValue).toBe(42);
   });
 });

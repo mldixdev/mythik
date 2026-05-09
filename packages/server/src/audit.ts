@@ -34,7 +34,7 @@ function getTimestamp(timezone?: string): Date {
   const parts = formatter.formatToParts(new Date());
   const get = (type: Intl.DateTimeFormatPartTypes) => parts.find(p => p.type === type)?.value ?? '0';
 
-  // Use Date.UTC so mssql sends the value as-is to SQL Server (no local timezone conversion)
+  // Use Date.UTC so SQL Server receives the value as-is (no local timezone conversion)
   return new Date(Date.UTC(
     parseInt(get('year')),
     parseInt(get('month')) - 1,

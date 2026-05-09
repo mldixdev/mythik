@@ -7,6 +7,7 @@ describe('Expression Resolver (integrated)', () => {
     user: { name: 'Alice', role: 'admin', age: 30 },
     form: { isValid: true },
     patient: { weight: 80, height: 1.75 },
+    service: { id: 7, label: 'Alignment', price: 450 },
   });
 
   const computedFunctions = {
@@ -82,5 +83,58 @@ describe('Expression Resolver (integrated)', () => {
       },
       $in: { $template: '${/user/name} has BMI ${bmi}' },
     })).toBe('Alice has BMI 26.1');
+  });
+
+  it('resolves nested expressions inside structured $let bodies', () => {
+    expect(resolver.resolve({
+      $let: {
+        w: { $state: '/patient/weight' },
+        h: { $state: '/patient/height' },
+      },
+      $in: {
+        label: { $template: '${/user/name}' },
+        metrics: {
+          weight: { $ref: 'w' },
+          height: { $ref: 'h' },
+          bmi: { $computed: 'calculateBMI', args: { weight: { $ref: 'w' }, height: { $ref: 'h' } } },
+        },
+      },
+    })).toEqual({
+      label: 'Alice',
+      metrics: {
+        weight: 80,
+        height: 1.75,
+        bmi: 26.1,
+      },
+    });
+  });
+
+  it('resolves dotted paths inside $let bindings', () => {
+    expect(resolver.resolve({
+      $let: {
+        service: { $state: '/service' },
+        quantity: 2,
+      },
+      $in: {
+        serviceId: { $ref: 'service.id' },
+        serviceName: { $ref: 'service.label' },
+        subtotal: { $math: 'multiply', args: [{ $ref: 'quantity' }, { $ref: 'service.price' }] },
+        summary: { $template: '${service.label}: ${service.price}' },
+      },
+    })).toEqual({
+      serviceId: 7,
+      serviceName: 'Alignment',
+      subtotal: 900,
+      summary: 'Alignment: 450',
+    });
+  });
+
+  it('throws when dotted $ref path is missing inside an existing binding', () => {
+    expect(() => resolver.resolve({
+      $let: {
+        service: { $state: '/service' },
+      },
+      $in: { $ref: 'service.missingPrice' },
+    })).toThrow('$ref "service.missingPrice"');
   });
 });
