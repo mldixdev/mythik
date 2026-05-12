@@ -12,7 +12,8 @@ state paths differ between `initialActions + fetch` vs `dataSources`.
 
 ## With `initialActions + fetch`
 
-Uses `/ui/loading` and `/ui/lastError`:
+Uses `/ui/loading`; critical loads should set `errorTarget` and render the
+screen-owned error path:
 
 ```json
 "loading": { "visible": { "$and": [
@@ -24,7 +25,7 @@ Uses `/ui/loading` and `/ui/lastError`:
   { "$not": { "$state": "/ui/loading" } },
   { "$not": { "$array": "count", "source": { "$state": "/items" } } }
 ]}},
-"error":   { "visible": { "$state": "/ui/lastError" } }
+"error":   { "visible": { "$state": "/ui/loadErrors/items" } }
 ```
 
 ## With `dataSources`

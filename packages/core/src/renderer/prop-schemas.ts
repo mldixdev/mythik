@@ -22,7 +22,7 @@ export const PRIMITIVE_PROP_SCHEMAS: Record<string, PrimitiveSchema> = {
   spacer: { validProps: ['size', 'direction', 'style'] },
   input: { validProps: ['value', 'type', 'placeholder', 'label', 'disabled', 'readOnly', 'required', 'format', 'formatOptions', 'selectOnFocus', 'checks', 'validateOn', 'style', 'onChange'] },
   textarea: { validProps: ['value', 'placeholder', 'label', 'rows', 'disabled', 'readOnly', 'style', 'onChange'] },
-  select: { validProps: ['value', 'options', 'placeholder', 'label', 'disabled', 'required', 'style', 'onChange'] },
+  select: { validProps: ['value', 'options', 'placeholder', 'label', 'labelKey', 'valueKey', 'disabled', 'required', 'style', 'onChange'] },
   checkbox: { validProps: ['checked', 'label', 'disabled', 'style', 'onChange'] },
   toggle: { validProps: ['checked', 'label', 'disabled', 'style', 'onChange'] },
   slider: { validProps: ['value', 'min', 'max', 'step', 'label', 'disabled', 'style', 'onChange'] },

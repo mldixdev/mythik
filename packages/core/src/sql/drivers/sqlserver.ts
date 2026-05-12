@@ -1,5 +1,5 @@
 import { compileNamedParams as compileSqlNamedParams } from '../named-params.js';
-import { SqlDriverError } from '../errors.js';
+import { missingSqlDriverDependencyError, SqlDriverError } from '../errors.js';
 import type { SqlDriver, SqlDriverConfig, SqlMutationResult, SqlParams, SqlStatement, SqlTransaction } from '../types.js';
 
 interface MssqlRequest {
@@ -130,9 +130,10 @@ async function loadMssqlModule(): Promise<MssqlModuleImport> {
   try {
     return (await import('mssql')) as unknown as MssqlModuleImport;
   } catch (error) {
-    throw new SqlDriverError('SQL Server support requires the optional dependency "mssql".', {
-      code: 'SQL_DRIVER_DEPENDENCY_MISSING',
+    throw missingSqlDriverDependencyError({
+      label: 'SQL Server',
       dialect: 'sqlserver',
+      packageName: 'mssql',
       cause: error,
     });
   }
@@ -236,9 +237,10 @@ export function createSqlServerDriver(config: SqlDriverConfig, deps: SqlServerDr
       return mssqlModule;
     } catch (error) {
       if (error instanceof SqlDriverError) throw error;
-      throw new SqlDriverError('SQL Server support requires the optional dependency "mssql".', {
-        code: 'SQL_DRIVER_DEPENDENCY_MISSING',
+      throw missingSqlDriverDependencyError({
+        label: 'SQL Server',
         dialect: 'sqlserver',
+        packageName: 'mssql',
         cause: error,
       });
     }

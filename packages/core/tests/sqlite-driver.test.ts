@@ -150,6 +150,9 @@ describe('SQLite SQL driver', () => {
       name: 'SqlDriverError',
       code: 'SQL_DRIVER_DEPENDENCY_MISSING',
       dialect: 'sqlite',
+      packageName: 'better-sqlite3',
+      installCommand: 'npm install better-sqlite3',
+      message: expect.stringContaining('npm install better-sqlite3'),
     });
   });
 

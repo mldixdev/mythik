@@ -36,8 +36,11 @@ are the npm publish surface.
 
 ## The bet
 
-Mythik rests on three propositions. If you don't believe them, Mythik
-isn't for you. If you do, the rest of the framework follows.
+Mythik starts from a simple bet: an application can live as a validated,
+editable, versioned contract in data. If that idea makes sense to you,
+the rest of the pieces fit together: specs in a database, agents working
+through the same validation flow, and changes that only reach runtime
+when the whole contract remains coherent.
 
 ### 1. Spec-driven
 
@@ -295,17 +298,22 @@ For SQL-backed spec stores and servers, Mythik supports SQL Server,
 PostgreSQL, MySQL, and SQLite through the `mythik/server` SQL boundary:
 
 ```bash
-npm install mythik         # SQL-backed SpecStores via mythik/server
-npm install mythik-server  # REST server runtime, when you need APIs too
+npm install mythik mythik-server
+npm install pg              # PostgreSQL
+npm install mysql2          # MySQL
+npm install mssql           # SQL Server
+npm install better-sqlite3  # SQLite
 npx mythik init-store --dialect sqlite --target ./mythik.db
 npx mythik init-store --dialect postgres --dry-run
 ```
 
-SQL adapters (`mssql`, `pg`, `mysql2`, and `better-sqlite3`) are
-declared as optional dependencies of `mythik`. npm/pnpm install
-optional dependencies by default; if the host installs with optional
-dependencies disabled, add the adapter for the database you use. MySQL
-generated upsert SQL targets MySQL 8.0.19+.
+SQL adapters are optional peer dependencies. Install only the driver
+for the database you actually use. SQLite uses the native
+`better-sqlite3` adapter; warnings from its transitive native-build
+helpers are adapter-level install noise, not a Mythik runtime failure.
+If a SQL adapter is missing at runtime, Mythik reports the package name
+and exact `npm install ...` command required for the selected dialect.
+MySQL generated upsert SQL targets MySQL 8.0.19+.
 
 ## Minimal React app
 
@@ -441,6 +449,13 @@ surface yet.
 The framework is shipped for real-world feedback. APIs are documented
 and stable enough to build production apps; expect refinements as
 patterns emerge.
+
+## Releases
+
+Release notes and patch details are published in the
+[CHANGELOG](https://github.com/mldixdev/mythik/blob/main/CHANGELOG.md)
+and on
+[GitHub Releases](https://github.com/mldixdev/mythik/releases).
 
 ## License
 

@@ -179,6 +179,13 @@ audit trail.
 Public release line. React Native work remains a repository preview
 track and is not part of the supported npm publish surface yet.
 
+## Releases
+
+Release notes and patch details are published in the
+[CHANGELOG](https://github.com/mldixdev/mythik/blob/main/CHANGELOG.md)
+and on
+[GitHub Releases](https://github.com/mldixdev/mythik/releases).
+
 ## License
 
 Apache-2.0.

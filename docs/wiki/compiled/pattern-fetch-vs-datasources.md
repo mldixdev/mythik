@@ -19,6 +19,11 @@ Both load data into state. Pick **one pattern per data target**.
 | **Re-fetch** | Manual (call fetch again) | Automatic on param change, or `refreshDataSource` |
 | **Use for** | Static initial data, POST/PUT/DELETE | Lists with filters, search, pagination |
 
+For critical `initialActions + fetch` screen loads, set `errorTarget` to a
+screen-owned path (for example `/ui/loadErrors/orderForm`) and render that
+path visibly. `/ui/lastError` is shared global state and can be overwritten
+by unrelated fetches.
+
 ## Rule
 
 **Don't mix both for the same data target.** They write to different

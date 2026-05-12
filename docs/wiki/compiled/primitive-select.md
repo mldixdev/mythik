@@ -7,8 +7,8 @@ sources: [docs/consumer/ai-context-primitives.md#select, docs/consumer/reference
 
 # `select`
 
-Dropdown picker. Options accept either string array or `[{ label, value }]`
-objects.
+Dropdown picker. Options accept strings, `[{ label, value }]` objects, or
+catalog-shaped objects when `labelKey` and `valueKey` are provided.
 
 ## Props
 
@@ -55,6 +55,16 @@ State-driven options:
 }}
 ```
 
+Catalog-shaped options:
+```json
+{ "type": "select", "props": {
+  "options": { "$state": "/cat/services/data" },
+  "labelKey": "name",
+  "valueKey": "id",
+  "value": { "$bindState": "/form/serviceId" }
+}}
+```
+
 ## Notes
 
 - **Listbox portals to `document.body`** (rule 225) — the dropdown panel
@@ -63,6 +73,10 @@ State-driven options:
 - **Dropdown uses `surface.modal`, NOT `surface.card`** (rule 117) — needs
   opaque background for readability across all surface modes (in
   `outlined`, card has transparent bg).
+
+Malformed option data renders as disabled diagnostics instead of blank
+clickable rows or crashes. `labelKey` and `valueKey` are simple field names on each
+option object, not nested paths.
 
 ## Related concepts
 

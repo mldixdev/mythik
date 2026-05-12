@@ -24,7 +24,7 @@ React Native work lives in the repository as a preview track and is not part of 
 
 The default `mythik` entry is browser-safe by construction. Node-only stores and SQL drivers live behind the `mythik/server` subpath so browser bundles do not pull `fs`, SQL adapters, or other Node-only dependencies.
 
-SQL adapters (`mssql`, `pg`, `mysql2`, `better-sqlite3`) are optional dependencies of `mythik`. npm/pnpm install optional dependencies by default; if optional dependencies are omitted, install the adapter for the database in use.
+SQL adapters (`mssql`, `pg`, `mysql2`, `better-sqlite3`) are optional peer dependencies. Browser-only apps do not install database drivers by default; SQL-backed stores and servers must install exactly the adapter for the selected database. SQLite uses native `better-sqlite3`, so warnings from its transitive native-build helpers belong to that adapter install path. Missing SQL adapter errors include the package name and exact install command.
 
 ## Programmatic CLI API
 

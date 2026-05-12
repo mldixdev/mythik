@@ -20,7 +20,8 @@ transactions, `GET` in `initialActions`). For reactive GETs, prefer
   "method"?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
   "headers"?: <object-or-$state>,
   "body"?: <object-with-expressions>,
-  "target"?: "/state/path"
+  "target"?: "/state/path",
+  "errorTarget"?: "/ui/screen-owned-error-path"
 }}
 ```
 
@@ -30,6 +31,9 @@ transactions, `GET` in `initialActions`). For reactive GETs, prefer
 - **Empty strings in body → `null`** (prevents DB errors on typed columns).
 - Sets `/ui/loading` to `true` while in flight; `false` when done.
 - On error: writes `/ui/lastError` with status and message.
+- If `errorTarget` is provided, writes the same structured error there and
+  clears it on success. Use this for critical `initialActions` screen loads
+  instead of relying only on global `/ui/lastError`.
 - **Auth headers auto-injected** for URLs whose hostname matches
   `auth.authDomains` — see [[@concept-auth-domains]].
 
@@ -50,7 +54,8 @@ POST with body:
     "title": { "$state": "/form/title" },
     "description": { "$state": "/form/description" }
   },
-  "target": "/lastResult"
+  "target": "/lastResult",
+  "errorTarget": "/ui/loadErrors/taskCreate"
 }}
 ```
 

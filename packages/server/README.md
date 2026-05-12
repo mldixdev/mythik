@@ -30,6 +30,21 @@ wired in.
 npm install mythik-server
 ```
 
+Install the SQL driver for your selected database explicitly:
+
+```bash
+npm install pg              # PostgreSQL
+npm install mysql2          # MySQL
+npm install mssql           # SQL Server
+npm install better-sqlite3  # SQLite
+```
+
+SQLite uses the native `better-sqlite3` adapter. If npm prints warnings
+from that adapter's transitive native-build helpers, the warning belongs
+to the SQLite adapter install path, not to `mythik-server` itself.
+Missing SQL adapter errors include the package name and install command
+for the selected dialect.
+
 `mythik` is included as a dependency — no separate install required.
 
 ## When to install this
@@ -181,6 +196,13 @@ to detect; in Mythik both `roleAccess` (frontend) and `policies`
 Public release line. Use with `mythik contract` to cross-check
 frontend specs against backend endpoints before deployment. APIs are
 documented for real-world feedback as the framework evolves.
+
+## Releases
+
+Release notes and patch details are published in the
+[CHANGELOG](https://github.com/mldixdev/mythik/blob/main/CHANGELOG.md)
+and on
+[GitHub Releases](https://github.com/mldixdev/mythik/releases).
 
 ## License
 

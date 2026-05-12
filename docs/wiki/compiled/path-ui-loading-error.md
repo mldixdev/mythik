@@ -16,6 +16,11 @@ Auto-managed by `fetch` action.
 | `/ui/loading` | boolean | Set `true` at request start, `false` at resolve. **Shared across all fetch actions.** |
 | `/ui/lastError` | object | Error message on failure; cleared on next successful fetch. |
 
+`/ui/lastError` is global compatibility state. For critical screen loads,
+set `fetch.params.errorTarget` to a screen-owned `/ui/...` path and render
+that path visibly; `fetch` writes the same structured error there and clears
+it on success.
+
 ## Use in visibility
 
 ```json

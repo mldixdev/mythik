@@ -1,6 +1,6 @@
 {
   "name": "mythik-server",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Declarative REST runtime for Mythik ApiSpec contracts, auth, RBAC, catalogs, and CRUD endpoints.",
   "license": "Apache-2.0",
   "type": "module",

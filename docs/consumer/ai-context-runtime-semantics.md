@@ -397,6 +397,8 @@ Implementation: `packages/core/src/actions/dispatcher.ts:103-116` (openModal/clo
 
 **`/ui/lastError`** — `fetch` action writes the error message on failure, cleared on next successful fetch.
 
+For critical screen-load fetches, set `params.errorTarget` to a screen-owned `/ui/...` path. The fetch action writes the same structured error there and clears it on success; this avoids relying only on shared `/ui/lastError`, which unrelated fetches can overwrite.
+
 **dataSources auto-managed paths (post-Item-E wire):**
 - `/{target}Loading` — `true` during in-flight request, `false` after resolve/reject
 - `/{target}Error` — error message on failure, `null` on success

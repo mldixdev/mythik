@@ -172,6 +172,9 @@ describe('SQL Server SQL driver', () => {
       name: 'SqlDriverError',
       code: 'SQL_DRIVER_DEPENDENCY_MISSING',
       dialect: 'sqlserver',
+      packageName: 'mssql',
+      installCommand: 'npm install mssql',
+      message: expect.stringContaining('npm install mssql'),
     });
   });
 

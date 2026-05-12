@@ -1,5 +1,5 @@
 import { compileNamedParams as compileSqlNamedParams } from '../named-params.js';
-import { SqlDriverError } from '../errors.js';
+import { missingSqlDriverDependencyError, SqlDriverError } from '../errors.js';
 import type { SqlDriver, SqlDriverConfig, SqlMutationResult, SqlParams, SqlStatement, SqlTransaction } from '../types.js';
 
 interface MysqlPool {
@@ -76,9 +76,10 @@ async function loadMysqlModule(): Promise<MysqlModuleImport> {
   try {
     return (await import('mysql2/promise')) as unknown as MysqlModuleImport;
   } catch (error) {
-    throw new SqlDriverError('MySQL support requires the optional dependency "mysql2".', {
-      code: 'SQL_DRIVER_DEPENDENCY_MISSING',
+    throw missingSqlDriverDependencyError({
+      label: 'MySQL',
       dialect: 'mysql',
+      packageName: 'mysql2',
       cause: error,
     });
   }
@@ -169,9 +170,10 @@ export function createMysqlDriver(config: SqlDriverConfig, deps: MysqlDriverDeps
       return mysqlModule;
     } catch (error) {
       if (error instanceof SqlDriverError) throw error;
-      throw new SqlDriverError('MySQL support requires the optional dependency "mysql2".', {
-        code: 'SQL_DRIVER_DEPENDENCY_MISSING',
+      throw missingSqlDriverDependencyError({
+        label: 'MySQL',
         dialect: 'mysql',
+        packageName: 'mysql2',
         cause: error,
       });
     }

@@ -2,6 +2,25 @@
 
 All notable public changes to Mythik are documented in this file.
 
+## 0.1.4
+
+Patch release focused on install-surface hygiene and runtime diagnostics.
+
+### Changed
+
+- Moved SQL adapters (`mssql`, `pg`, `mysql2`, and `better-sqlite3`) from installed-by-default optional dependencies to optional peer dependencies. Browser-only installs no longer pull database drivers; SQL-backed stores and servers install the selected driver explicitly.
+
+### Added
+
+- Added `fetch.params.errorTarget` so direct `fetch` actions can write HTTP/network failures to a screen-owned error path and clear that path on success. This gives critical `initialActions` screen loads a first-class visible error contract without relying only on global `/ui/lastError`.
+- Added `select.props.labelKey` and `select.props.valueKey` for catalog-shaped option rows such as `{ id, name }`.
+- Added install-command metadata to missing SQL driver errors so optional peer dependency failures point directly to the required package.
+
+### Fixed
+
+- Hardened `select` option normalization so malformed option data renders disabled diagnostics instead of crashing or producing blank clickable rows.
+- Documented SQLite's native `better-sqlite3` install path so transitive native-build warnings are understood as adapter-level warnings, not Mythik runtime failures.
+
 ## 0.1.3
 
 Compatible release for the `0.1.x` line. This expands the database foundation

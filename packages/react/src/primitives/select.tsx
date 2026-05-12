@@ -7,13 +7,17 @@ import { useDesignTokens } from './use-design-tokens.js';
 interface SelectOption {
   label: string;
   value: string;
+  disabled?: boolean;
+  invalid?: boolean;
 }
 
 interface SelectProps {
-  value?: string;
-  options?: (string | SelectOption)[];
+  value?: string | number | boolean;
+  options?: unknown[];
   placeholder?: string;
   label?: string;
+  labelKey?: string;
+  valueKey?: string;
   disabled?: boolean;
   required?: boolean;
   style?: CSSProperties;
@@ -21,11 +25,47 @@ interface SelectProps {
   onChange?: (value: string) => void;
 }
 
-function normalizeOption(opt: string | SelectOption): SelectOption {
-  return typeof opt === 'string' ? { label: opt, value: opt } : opt;
+function optionScalar(value: unknown): string | undefined {
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  return undefined;
 }
 
-export function Select({ value = '', options = [], placeholder, label, disabled, required, style, _tokens, onChange }: SelectProps) {
+function invalidOption(index: number, labelKey: string, valueKey: string): SelectOption {
+  console.warn(`[Mythik] Invalid select option at index ${index}. Expected a string or an object with scalar "${labelKey}" and "${valueKey}" fields.`);
+  return { label: 'Invalid option', value: `__invalid_${index}`, disabled: true, invalid: true };
+}
+
+function invalidOptionsList(): SelectOption[] {
+  console.warn('[Mythik] Invalid select options. Expected options to be an array.');
+  return [{ label: 'Invalid option', value: '__invalid_options', disabled: true, invalid: true }];
+}
+
+function normalizeOption(opt: unknown, index: number, labelKey: string, valueKey: string): SelectOption {
+  if (typeof opt === 'string') {
+    return { label: opt, value: opt };
+  }
+  if (!opt || typeof opt !== 'object') {
+    return invalidOption(index, labelKey, valueKey);
+  }
+
+  const raw = opt as Record<string, unknown>;
+  const label = optionScalar(raw[labelKey]);
+  const value = optionScalar(raw[valueKey]);
+  if (label !== undefined && value !== undefined) {
+    return {
+      label,
+      value,
+      disabled: raw.disabled === true,
+      invalid: raw.invalid === true,
+    };
+  }
+
+  return invalidOption(index, labelKey, valueKey);
+}
+
+export function Select({ value = '', options = [], placeholder, label, labelKey = 'label', valueKey = 'value', disabled, required, style, _tokens, onChange }: SelectProps) {
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
   const buttonRef = React.useRef<HTMLButtonElement>(null);
@@ -37,8 +77,10 @@ export function Select({ value = '', options = [], placeholder, label, disabled,
   const [anchorRect, setAnchorRect] = React.useState<DOMRect | null>(null);
   const t = useDesignTokens(_tokens);
 
-  const normalizedOptions = options.map(normalizeOption);
-  const selectedLabel = normalizedOptions.find((o) => o.value === value)?.label ?? placeholder ?? 'Select...';
+  const optionList = Array.isArray(options) ? options : invalidOptionsList();
+  const normalizedOptions = optionList.map((opt, index) => normalizeOption(opt, index, labelKey, valueKey));
+  const selectedValue = value === undefined || value === null ? '' : String(value);
+  const selectedLabel = normalizedOptions.find((o) => o.value === selectedValue)?.label ?? placeholder ?? 'Select...';
 
   const color = style?.color as string ?? 'inherit';
 
@@ -114,7 +156,7 @@ export function Select({ value = '', options = [], placeholder, label, disabled,
           ...(open ? t.surface.inputFocus : {}),
         }}
       >
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: value ? 1 : 0.5 }}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: selectedValue ? 1 : 0.5 }}>
           {selectedLabel}
         </span>
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"
@@ -147,17 +189,18 @@ export function Select({ value = '', options = [], placeholder, label, disabled,
             </div>
           )}
           {normalizedOptions.map((opt) => {
-            const isSelected = opt.value === value;
+            const isSelected = opt.value === selectedValue;
             return (
-              <div key={opt.value} role="option" aria-selected={isSelected} onClick={() => selectOption(opt.value)}
+              <div key={opt.value} role="option" aria-selected={isSelected} aria-disabled={opt.disabled ? true : undefined} onClick={() => { if (!opt.disabled) selectOption(opt.value); }}
                 style={{
-                  padding: `${t.spacing.scale.sm}px ${t.spacing.scale.sm + t.spacing.unit}px`, fontSize: t.typography.scale.sm.fontSize, fontFamily: t.typography.fontFamily.base, cursor: 'pointer',
+                  padding: `${t.spacing.scale.sm}px ${t.spacing.scale.sm + t.spacing.unit}px`, fontSize: t.typography.scale.sm.fontSize, fontFamily: t.typography.fontFamily.base, cursor: opt.disabled ? 'not-allowed' : 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   backgroundColor: isSelected ? `${t.colors.primary}20` : 'transparent',
                   color: isSelected ? t.colors.primary : color,
+                  opacity: opt.disabled ? 0.65 : 1,
                   fontWeight: isSelected ? t.typography.weight.semibold : t.typography.weight.normal, transition: 'background-color 100ms',
                 }}
-                onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.backgroundColor = `${t.colors.primary}10`; }}
+                onMouseEnter={(e) => { if (!isSelected && !opt.disabled) e.currentTarget.style.backgroundColor = `${t.colors.primary}10`; }}
                 onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent'; }}
               >
                 <span>{opt.label}</span>

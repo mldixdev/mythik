@@ -931,6 +931,7 @@ The `fetch` action supports:
 - **Empty string sanitization:** Empty strings in body are automatically converted to `null` (prevents database errors for typed columns)
 - **Loading state:** Sets `/ui/loading` to true while in flight, false when done
 - **Error handling:** On failure, sets `/ui/lastError` with status and message
+- **Screen-owned errors:** Optional `errorTarget` receives the same structured error and is cleared on success; use it for critical `initialActions` loads
 
 ```json
 {
@@ -3221,3 +3222,7 @@ See `ai-context.md` for spec-gen anti-patterns the AI must NOT generate.
 288. **Event arrays may mix actions and transactions** - Event bindings can be a single action, a single transaction, or an array containing both normal action bindings and transaction bindings. Mythik executes the array sequentially and awaits each transaction before continuing. Transaction phases cannot contain nested transactions.
 289. **`$let` dotted references read nested binding values** - A `$ref` may target an object binding path such as `{ "$ref": "user.name" }`, and `$template` placeholders may read the same path as `${user.name}`. Use this for object values produced by `$let`; missing dotted `$ref` segments are invalid references and should be fixed instead of treated as optional data.
 290. **`params.skipIf` is a dispatch-time action guard** - Any action binding may include `params.skipIf`. Mythik resolves it before resolving the rest of the params; when truthy, the action is skipped and the action chain continues. The action handler never receives `skipIf`.
+291. **Direct `fetch` supports `errorTarget` for visible screen-load failures** - `fetch.params.errorTarget` writes HTTP/network errors to a consumer-owned state path and clears it on success. Use it for critical `initialActions` loads so the screen can render a local banner/empty state; `/ui/lastError` remains global compatibility state and can be overwritten by unrelated fetches.
+292. **`select` supports catalog keys and invalid-option diagnostics** - `select.options` may be strings, `{ label, value }`, or catalog-shaped objects when `labelKey`/`valueKey` are provided. Values emitted from the primitive are strings. Malformed option data renders as disabled diagnostics instead of blank clickable options or crashes, so AI-generated catalog bindings fail visibly.
+293. **SQL adapters are optional peer dependencies** - `mythik` does not install SQL drivers by default. Browser-only apps install `mythik mythik-react`. SQL-backed stores/servers must install exactly the selected adapter (`mssql`, `pg`, `mysql2`, or `better-sqlite3`). SQLite uses native `better-sqlite3`; warnings from its transitive native-build helpers are adapter-level install warnings, not Mythik runtime failures.
+294. **Missing SQL adapter errors are actionable** - If a SQL-backed store or server uses a dialect whose adapter package is not installed, Mythik throws `SqlDriverError` with `code: "SQL_DRIVER_DEPENDENCY_MISSING"`, `packageName`, `installCommand`, and a message containing the exact `npm install ...` command.

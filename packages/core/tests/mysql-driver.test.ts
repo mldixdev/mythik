@@ -178,6 +178,9 @@ describe('MySQL SQL driver', () => {
       name: 'SqlDriverError',
       code: 'SQL_DRIVER_DEPENDENCY_MISSING',
       dialect: 'mysql',
+      packageName: 'mysql2',
+      installCommand: 'npm install mysql2',
+      message: expect.stringContaining('npm install mysql2'),
     });
   });
 

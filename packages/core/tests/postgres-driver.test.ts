@@ -141,6 +141,9 @@ describe('PostgreSQL SQL driver', () => {
       name: 'SqlDriverError',
       code: 'SQL_DRIVER_DEPENDENCY_MISSING',
       dialect: 'postgres',
+      packageName: 'pg',
+      installCommand: 'npm install pg',
+      message: expect.stringContaining('npm install pg'),
     });
   });
 

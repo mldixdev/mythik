@@ -1,5 +1,5 @@
 import { compileNamedParams as compileSqlNamedParams } from '../named-params.js';
-import { SqlDriverError } from '../errors.js';
+import { missingSqlDriverDependencyError, SqlDriverError } from '../errors.js';
 import type { SqlDriver, SqlDriverConfig, SqlMutationResult, SqlParams, SqlStatement, SqlTransaction } from '../types.js';
 
 interface PgQueryResult {
@@ -87,9 +87,10 @@ async function loadPgModule(): Promise<PgModuleImport> {
   try {
     return (await import('pg')) as unknown as PgModuleImport;
   } catch (error) {
-    throw new SqlDriverError('PostgreSQL support requires the optional dependency "pg".', {
-      code: 'SQL_DRIVER_DEPENDENCY_MISSING',
+    throw missingSqlDriverDependencyError({
+      label: 'PostgreSQL',
       dialect: 'postgres',
+      packageName: 'pg',
       cause: error,
     });
   }
@@ -171,9 +172,10 @@ export function createPostgresDriver(config: SqlDriverConfig, deps: PostgresDriv
       return pgModule;
     } catch (error) {
       if (error instanceof SqlDriverError) throw error;
-      throw new SqlDriverError('PostgreSQL support requires the optional dependency "pg".', {
-        code: 'SQL_DRIVER_DEPENDENCY_MISSING',
+      throw missingSqlDriverDependencyError({
+        label: 'PostgreSQL',
         dialect: 'postgres',
+        packageName: 'pg',
         cause: error,
       });
     }

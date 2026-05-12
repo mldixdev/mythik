@@ -1,5 +1,5 @@
 import { compileNamedParams as compileSqlNamedParams } from '../named-params.js';
-import { SqlDriverError } from '../errors.js';
+import { missingSqlDriverDependencyError, SqlDriverError } from '../errors.js';
 import type { SqlDriver, SqlDriverConfig, SqlMutationResult, SqlParams, SqlStatement, SqlTransaction } from '../types.js';
 
 type SqlitePrimitive = string | number | bigint | Buffer | null;
@@ -176,9 +176,10 @@ async function loadBetterSqlite(): Promise<BetterSqliteConstructor> {
     const mod = await import('better-sqlite3');
     return mod.default;
   } catch (error) {
-    throw new SqlDriverError('SQLite support requires the optional dependency "better-sqlite3".', {
-      code: 'SQL_DRIVER_DEPENDENCY_MISSING',
+    throw missingSqlDriverDependencyError({
+      label: 'SQLite',
       dialect: 'sqlite',
+      packageName: 'better-sqlite3',
       cause: error,
     });
   }
@@ -204,9 +205,10 @@ export function createSqliteDriver(config: SqlDriverConfig, deps: SqliteDriverDe
       Database = await loadDatabase();
     } catch (error) {
       if (error instanceof SqlDriverError) throw error;
-      throw new SqlDriverError('SQLite support requires the optional dependency "better-sqlite3".', {
-        code: 'SQL_DRIVER_DEPENDENCY_MISSING',
+      throw missingSqlDriverDependencyError({
+        label: 'SQLite',
         dialect: 'sqlite',
+        packageName: 'better-sqlite3',
         cause: error,
       });
     }

@@ -206,7 +206,10 @@ Options formats:
 ```json
 "options": ["Low", "Medium", "High"]
 "options": [{ "label": "Low", "value": "low" }, { "label": "Medium", "value": "medium" }]
+"options": { "$state": "/cat/services/data" }, "labelKey": "name", "valueKey": "id"
 ```
+
+`labelKey` defaults to `"label"` and `valueKey` defaults to `"value"`. Use them for catalog rows such as `{ "id": 1, "name": "Cambio de aceite" }`. Values are emitted as strings from `on.change`. Malformed object options render as disabled diagnostics instead of blank clickable rows.
 
 ### checkbox
 

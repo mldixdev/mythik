@@ -30,6 +30,15 @@ npm install -D mythik-cli
 
 Add `mythik-server` only when building a Mythik-backed Node server. React Native work is a repository preview track, not part of the supported npm publish surface yet.
 
-SQL adapters (`mssql`, `pg`, `mysql2`, `better-sqlite3`) are optional dependencies of `mythik`. They install by default with npm/pnpm unless optional dependencies are omitted.
+SQL adapters (`mssql`, `pg`, `mysql2`, `better-sqlite3`) are optional peer dependencies. Install only the selected database adapter:
+
+```bash
+npm install pg              # PostgreSQL
+npm install mysql2          # MySQL
+npm install mssql           # SQL Server
+npm install better-sqlite3  # SQLite
+```
+
+SQLite uses native `better-sqlite3`; warnings from its transitive native-build helpers are adapter-level install warnings, not Mythik runtime failures. Missing SQL adapter errors include the package name and exact install command for the selected dialect.
 
 Related: [[@cli-docs]], [[@cli-programmatic-api]], [[@concept-spec-stores-catalog]], [[@concept-where-to-look]].

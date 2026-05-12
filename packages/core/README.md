@@ -85,8 +85,25 @@ import { FileSpecStore, SqlSpecStore, createSqlDriver } from 'mythik/server';
 
 Bundlers like Vite or Webpack should always import from `mythik` (the
 main entry). The `mythik/server` subpath is for Node scripts and
-server processes only — it pulls in Node APIs and optional SQL driver
-packages that won't work in a browser.
+server processes only. It uses Node APIs and dynamically loads the SQL
+driver package you installed for the selected database.
+
+SQL adapters are optional peer dependencies. Install only the adapter
+you use:
+
+```bash
+npm install pg              # PostgreSQL
+npm install mysql2          # MySQL
+npm install mssql           # SQL Server
+npm install better-sqlite3  # SQLite
+```
+
+SQLite uses the native `better-sqlite3` adapter. If npm prints warnings
+from that adapter's transitive native-build helpers, the warning belongs
+to the SQLite adapter install path, not to Mythik's browser/runtime
+install.
+Missing SQL adapter errors include the package name and install command
+for the selected dialect.
 
 SQL-backed stores use one dialect-aware driver boundary:
 
@@ -201,6 +218,13 @@ the supported npm publish surface yet.
 
 Public release line. APIs are documented for real-world feedback as
 the framework evolves.
+
+## Releases
+
+Release notes and patch details are published in the
+[CHANGELOG](https://github.com/mldixdev/mythik/blob/main/CHANGELOG.md)
+and on
+[GitHub Releases](https://github.com/mldixdev/mythik/releases).
 
 ## License
 

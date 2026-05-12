@@ -369,6 +369,89 @@ describe('ActionDispatcher', () => {
     });
   });
 
+  describe('fetch errorTarget', () => {
+    it('writes HTTP errors to errorTarget without changing the success target', async () => {
+      const store = createStateStore({ data: { existing: true } });
+      const resolver = createResolver({ store });
+      const dispatcher = createActionDispatcher({
+        store,
+        fetcher: async () => ({
+          ok: false,
+          status: 500,
+          json: async () => ({ error: { message: 'database failed' } }),
+        } as Response),
+      });
+
+      await dispatcher.dispatch({
+        action: 'fetch',
+        params: {
+          url: 'https://api.test/orders/1',
+          target: '/data',
+          errorTarget: '/ui/loadErrors/order-form',
+        },
+      }, (expr) => resolver.resolve(expr));
+
+      const expectedError = {
+        status: 500,
+        message: 'HTTP 500',
+        data: { error: { message: 'database failed' } },
+      };
+      expect(store.get('/data')).toEqual({ existing: true });
+      expect(store.get('/ui/lastError')).toEqual(expectedError);
+      expect(store.get('/ui/loadErrors/order-form')).toEqual(expectedError);
+    });
+
+    it('clears errorTarget after a successful fetch', async () => {
+      const store = createStateStore({
+        ui: { loadErrors: { orderForm: { message: 'old error' } } },
+      });
+      const resolver = createResolver({ store });
+      const dispatcher = createActionDispatcher({
+        store,
+        fetcher: async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ id: 1, total: 120 }),
+        } as Response),
+      });
+
+      await dispatcher.dispatch({
+        action: 'fetch',
+        params: {
+          url: 'https://api.test/orders/1',
+          target: '/form',
+          errorTarget: '/ui/loadErrors/orderForm',
+        },
+      }, (expr) => resolver.resolve(expr));
+
+      expect(store.get('/form')).toEqual({ id: 1, total: 120 });
+      expect(store.get('/ui/loadErrors/orderForm')).toBeNull();
+      expect(store.get('/ui/lastError')).toBeNull();
+    });
+
+    it('writes network failures to errorTarget', async () => {
+      const store = createStateStore();
+      const resolver = createResolver({ store });
+      const dispatcher = createActionDispatcher({
+        store,
+        fetcher: async () => {
+          throw new Error('connection refused');
+        },
+      });
+
+      await dispatcher.dispatch({
+        action: 'fetch',
+        params: {
+          url: 'https://api.test/orders/1',
+          errorTarget: '/ui/loadErrors/orderForm',
+        },
+      }, (expr) => resolver.resolve(expr));
+
+      expect(store.get('/ui/lastError')).toEqual({ message: 'connection refused' });
+      expect(store.get('/ui/loadErrors/orderForm')).toEqual({ message: 'connection refused' });
+    });
+  });
+
   describe('submitForm notification format', () => {
     it('creates notification with UUID format when successMessage provided', async () => {
       const { store, dispatcher, resolve } = setup();

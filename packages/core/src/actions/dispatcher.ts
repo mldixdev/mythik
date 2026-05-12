@@ -253,6 +253,7 @@ export function createActionDispatcher(config: ActionDispatcherConfig): ActionDi
       const method = (params.method as string) ?? 'GET';
       const body = params.body as Record<string, unknown> | undefined;
       const target = params.target as string | undefined;
+      const errorTarget = params.errorTarget as string | undefined;
       const headers = (params.headers as Record<string, string>) ?? {};
 
       if (!url) throw new Error('fetch action requires "url" param');
@@ -278,8 +279,10 @@ export function createActionDispatcher(config: ActionDispatcherConfig): ActionDi
         const data = await response.json().catch(() => null);
 
         if (!response.ok) {
+          const error = { status: response.status, message: `HTTP ${response.status}`, data };
           store.set('/ui/loading', false);
-          store.set('/ui/lastError', { status: response.status, message: `HTTP ${response.status}`, data });
+          store.set('/ui/lastError', error);
+          if (errorTarget) store.set(errorTarget, error);
           return;
         }
 
@@ -289,9 +292,12 @@ export function createActionDispatcher(config: ActionDispatcherConfig): ActionDi
 
         store.set('/ui/loading', false);
         store.set('/ui/lastError', null);
+        if (errorTarget) store.set(errorTarget, null);
       } catch (err) {
+        const error = { message: err instanceof Error ? err.message : 'Network error' };
         store.set('/ui/loading', false);
-        store.set('/ui/lastError', { message: err instanceof Error ? err.message : 'Network error' });
+        store.set('/ui/lastError', error);
+        if (errorTarget) store.set(errorTarget, error);
       }
     },
 

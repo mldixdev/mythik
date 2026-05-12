@@ -24,13 +24,16 @@ Use `npm install mythik mythik-react` for a React app, `npm install -D mythik-cl
 
 Server-side SQL helpers, SQL drivers, and SQL-backed spec stores are imported from `mythik/server`, not from the browser-safe `mythik` entry. Supported SQL dialects are `sqlserver`, `postgres`, `mysql`, and `sqlite`.
 
-Database runtime dependencies: SQL adapters (`mssql`, `pg`, `mysql2`, and `better-sqlite3`) are optional dependencies of `mythik` and install by default with npm/pnpm unless optional dependencies are omitted. If the host installs with optional dependencies disabled, add only the adapter you use:
+Database runtime dependencies: SQL adapters (`mssql`, `pg`, `mysql2`, and `better-sqlite3`) are optional peer dependencies. Browser-only installs do not need them. SQL-backed stores and servers must install exactly the adapter for the selected database:
 
 ```bash
+npm install mssql           # SQL Server
 npm install pg              # PostgreSQL
 npm install mysql2          # MySQL
 npm install better-sqlite3  # SQLite
 ```
+
+SQLite uses the native `better-sqlite3` adapter. npm warnings from that adapter's transitive native-build helpers are adapter-level install noise, not a Mythik runtime failure. Missing SQL adapter errors include the package name and exact install command for the selected dialect.
 
 MySQL support targets MySQL 8.0.19+ for generated upsert SQL. Older MySQL deployments need an explicit custom SQL path or another supported dialect.
 
@@ -438,6 +441,7 @@ Any action binding may include `params.skipIf`. Mythik resolves `skipIf` at disp
 - Empty strings in body → `null` (prevents DB errors)
 - Sets `/ui/loading` while in flight
 - On error: sets `/ui/lastError` with status and message
+- Optional `errorTarget` writes the same structured error to a screen-owned path and clears that path on success. Use it for critical screen-load fetches instead of relying only on global `/ui/lastError`
 - Auth headers auto-injected for `authDomains` URLs
 
 ### Transactions (Optimistic Updates)
@@ -591,14 +595,16 @@ Inside: `{ "$selection": "selected" }` (boolean), `{ "$selection": "count" }`. T
 
 **Rule:** Don't mix both for the same data target. Pick one pattern per data source.
 
+For critical `initialActions` fetches, set `params.errorTarget` to a screen-owned path (for example `/ui/loadErrors/orderForm`) and render a visible error state from that path. `/ui/lastError` is global and can be overwritten by unrelated fetches.
+
 ### Loading/Content/Empty Pattern
 
-**With `initialActions` fetch** (uses `/ui/loading` and `/ui/lastError`):
+**With `initialActions` fetch** (uses `/ui/loading`; critical loads should set `errorTarget`):
 ```json
 "loading": { "visible": { "$and": [{ "$state": "/ui/loading" }, { "$not": { "$array": "count", "source": { "$state": "/items" } } }] } },
 "content": { "visible": { "$array": "count", "source": { "$state": "/items" } } },
 "empty":   { "visible": { "$and": [{ "$not": { "$state": "/ui/loading" } }, { "$not": { "$array": "count", "source": { "$state": "/items" } } }] } },
-"error":   { "visible": { "$state": "/ui/lastError" } }
+"error":   { "visible": { "$state": "/ui/loadErrors/items" } }
 ```
 
 **With `dataSources`** (uses auto-generated `/{target}Loading` and `/{target}Error`):
@@ -1451,3 +1457,7 @@ When the framework changes the schema in a future version, this section will gai
 91. Event arrays may mix normal actions and transaction bindings. Mythik executes them sequentially and awaits each transaction before continuing. Use this when a flow needs a small action before or after an optimistic transaction; do not wrap a transaction inside another transaction phase.
 92. `$ref` and `$template` placeholders can read nested values from `$let` object bindings with dot notation, for example `{ "$ref": "user.name" }` or `${user.name}`. If a dotted `$ref` segment is missing, runtime throws an unknown `$ref` error rather than silently returning undefined.
 93. Use `params.skipIf` for a dispatch-time action guard when an action should be skipped but the surrounding action chain should continue. `skipIf` is resolved before other params and is removed before the action handler runs. Do not use `skipIf` as a substitute for form validation or transaction rollback.
+94. For critical direct `fetch` actions, especially `initialActions` screen loads, set `params.errorTarget` to a screen-owned `/ui/...` path and render that path visibly. The fetch action still writes global `/ui/lastError`, but `/ui/lastError` is shared and can be overwritten by unrelated fetches. On success, Mythik clears the provided `errorTarget`.
+95. `select.options` accepts strings, `{ label, value }` objects, or catalog-shaped objects when `labelKey` and `valueKey` are provided. Example: `{ "options": { "$state": "/cat/services/data" }, "labelKey": "name", "valueKey": "id" }`. Values are emitted as strings from `on.change`; malformed option data renders disabled diagnostics instead of blank clickable rows or crashes.
+96. SQL adapters are optional peer dependencies, not installed-by-default runtime payload. Browser-only apps install `mythik mythik-react` without database drivers. SQL-backed stores/servers must install exactly one selected adapter: `mssql`, `pg`, `mysql2`, or `better-sqlite3`. SQLite uses native `better-sqlite3`; native-build helper warnings from that adapter are not Mythik runtime failures.
+97. Missing SQL adapter errors are actionable. The thrown `SqlDriverError` includes `packageName`, `installCommand`, and a message with the exact `npm install ...` command for the selected dialect.

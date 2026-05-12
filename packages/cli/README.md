@@ -224,6 +224,13 @@ Public release line. The binary name is `mythik`; the npm package name
 is `mythik-cli`. APIs are documented for real-world feedback as the
 framework evolves.
 
+## Releases
+
+Release notes and patch details are published in the
+[CHANGELOG](https://github.com/mldixdev/mythik/blob/main/CHANGELOG.md)
+and on
+[GitHub Releases](https://github.com/mldixdev/mythik/releases).
+
 ## License
 
 Apache-2.0.

@@ -31,7 +31,7 @@ const STORE_HELP = 'Store type (supabase, sqlserver, postgres, mysql, sqlite, fi
 program
   .name('mythik')
   .description('Mythik CLI — manage specs via SpecEngine')
-  .version('0.1.3');
+  .version('0.1.4');
 
 program
   .command('manifest <screen>')
